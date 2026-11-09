@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "RoomRent — จัดการห้องเช่า",
+  "short_name": "RoomRent",
+  "description": "จัดการห้องเช่า ออกบิล และบันทึกข้อมูลไว้ในอุปกรณ์นี้ ใช้งานออฟไลน์ได้",
+  "lang": "th-TH",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#111816",
+  "theme_color": "#111816",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/roomrent-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

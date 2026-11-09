@@ -40,6 +40,16 @@ jobs:
 
       - name: Build static app
         run: pnpm build:static
+      - name: Remove platform-only files from static output
+        run: |
+          rm -f dist/public/api/platform/config.js
+          rm -f dist/public/__manus__/debug-collector.js
+          rm -f dist/public/.gitkeep
+          find dist/public -type d -empty -delete
+          test -s dist/public/index.html
+          test ! -e dist/public/api/platform/config.js
+          test ! -e dist/public/__manus__/debug-collector.js
+          test -z "$(find dist/public -type f -name '.*' -print -quit)"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
