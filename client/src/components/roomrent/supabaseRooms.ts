@@ -32,10 +32,20 @@ function getClient(): SupabaseClient {
   return client;
 }
 
+/** Reuse the single configured Supabase client for account-wide data operations. */
+export function getSupabaseClient(): SupabaseClient {
+  return getClient();
+}
+
 async function requireUserId() {
   const { data, error } = await getClient().auth.getUser();
   if (error || !data.user) throw new Error("กรุณาเข้าสู่ระบบ Supabase ก่อนจัดการข้อมูลห้อง");
   return data.user.id;
+}
+
+/** Require an authenticated user before accessing account-owned data. */
+export async function requireSupabaseUserId(): Promise<string> {
+  return requireUserId();
 }
 
 function toRoom(row: RoomRow): RentalRoom {

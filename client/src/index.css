@@ -813,3 +813,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .supabase-panel-note, .supabase-panel-error, .supabase-panel-message { grid-column: 1 / -1; }
   .supabase-panel-actions .button { min-height: 34px; font-size: 10px; }
 }
+
+.cloud-account-shell { min-height: 100vh; background: #111713; color: #e5eee8; }
+.cloud-account-main { width: min(100% - 32px, 920px); margin: 0 auto; padding: 28px 0 56px; }
+.cloud-account-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid #2b3930; }
+.cloud-account-brand > span { color: #9dad9f; font-size: 11px; text-align: right; }
+.cloud-account-content { width: min(100%, 760px); margin: clamp(28px, 8vh, 84px) auto 0; }
+.cloud-account-content > h1 { margin: 0 0 8px; color: #eff7f1; font-size: clamp(22px, 4vw, 30px); }
+.cloud-account-content > p { margin: 0 0 22px; color: #9dad9f; font-size: 13px; line-height: 1.7; }
+.cloud-account-content .supabase-rooms-panel { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 14px; padding: 20px; }
+.cloud-account-content .supabase-panel-copy, .cloud-account-content .supabase-panel-actions, .cloud-account-content .supabase-login-form, .cloud-account-content .supabase-panel-error, .cloud-account-content .supabase-panel-message { grid-column: 1 / -1; }
+.cloud-account-content .supabase-panel-copy label { display: flex; align-items: flex-start; gap: 8px; color: #c8d4ca; font-size: 12px; line-height: 1.6; }
+.cloud-account-content .supabase-panel-copy input[type="checkbox"] { margin-top: 3px; accent-color: #5dbd9c; }
+.cloud-account-content .supabase-login-form { grid-template-columns: 1fr; }
+.cloud-account-content .supabase-login-form .supabase-panel-actions { grid-column: 1; }
+.cloud-account-content .button { min-height: 40px; white-space: normal; text-align: left; }
+@media screen and (max-width: 540px) {
+  .cloud-account-main { width: min(100% - 24px, 920px); padding-top: 16px; }
+  .cloud-account-brand { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .cloud-account-brand > span { text-align: left; }
+  .cloud-account-content { margin-top: 28px; }
+  .cloud-account-content .supabase-rooms-panel { padding: 14px; }
+}

@@ -1,0 +1,77 @@
+name: Build and deploy RoomRent to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: roomrent-pages-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy production
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Validate Supabase build variables
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" || { echo "::error::VITE_SUPABASE_URL repository variable is required"; exit 1; }
+          test -n "$SUPABASE_KEY" || { echo "::error::VITE_SUPABASE_ANON_KEY repository variable is required"; exit 1; }
+          case "$SUPABASE_URL" in https://*.supabase.co) ;; *) echo "::error::VITE_SUPABASE_URL must be a Supabase HTTPS project URL"; exit 1 ;; esac
+          case "$SUPABASE_KEY" in sb_publishable_*|eyJ*) ;; *) echo "::error::Use a Supabase publishable or legacy anon key, never a secret/service-role key"; exit 1 ;; esac
+
+      - name: Build static site
+        run: pnpm build:static
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Remove platform-only files from static output
+        run: |
+          rm -f dist/public/api/platform/config.js
+          rm -f dist/public/__manus__/debug-collector.js
+          rm -f dist/public/.gitkeep
+          find dist/public -type d -empty -delete
+          test -s dist/public/index.html
+          test ! -e dist/public/api/platform/config.js
+          test ! -e dist/public/__manus__/debug-collector.js
+          test -z "$(find dist/public -type f -name '.*' -print -quit)"
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist/public --project-name=roomrent-local-pwa --branch=main

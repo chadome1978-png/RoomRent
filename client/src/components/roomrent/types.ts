@@ -65,6 +65,8 @@ export type LocalDatabase = {
   invoices: RentalInvoice[];
   expenses: RentalExpense[];
   promptPay?: PromptPaySettings;
+  /** Cloud migration marker for the former Supabase rental_rooms table. */
+  legacyRoomsImported?: boolean;
 };
 
 export const LOCAL_DATA_KEY = "roomrent-local-data-v1";
@@ -164,6 +166,7 @@ export function parseLocalDatabase(value: unknown): LocalDatabase | null {
     invoices: payload.invoices,
     expenses,
     ...(payload.promptPay ? { promptPay: payload.promptPay } : {}),
+    ...(payload.legacyRoomsImported === true ? { legacyRoomsImported: true } : {}),
   };
 }
 
