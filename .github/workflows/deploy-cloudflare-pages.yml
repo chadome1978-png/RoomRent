@@ -43,6 +43,24 @@ jobs:
               print(f"::error::{message}", file=sys.stderr)
               sys.exit(1)
 
+          def api_error_detail(raw_body):
+              try:
+                  errors = json.loads(raw_body).get("errors", [])
+                  first = errors[0] if errors else {}
+              except (json.JSONDecodeError, UnicodeDecodeError, AttributeError, TypeError):
+                  return ""
+              code = first.get("code")
+              message = first.get("message", "")
+              if not isinstance(message, str):
+                  message = ""
+              message = message.replace(token, "[REDACTED]")
+              message = re.sub(r"[\r\n]+", " ", message)
+              message = re.sub(r"[^A-Za-z0-9 .,_/()'\-]", "?", message)[:180]
+              detail = f"Cloudflare error {code}" if code is not None else ""
+              if message:
+                  detail += f": {message}"
+              return detail
+
           if not re.fullmatch(r"[0-9a-fA-F]{32}", account_id):
               fail("CLOUDFLARE_ACCOUNT_ID repository variable is missing or malformed")
           if not token:
@@ -57,16 +75,22 @@ jobs:
               with urlopen(request, timeout=20) as response:
                   result = json.loads(response.read())
           except HTTPError as error:
+              detail = api_error_detail(error.read(65536))
+              suffix = f"; {detail}" if detail else ""
               if error.code in (401, 403):
-                  fail(f"Cloudflare token rejected or lacks Pages access (HTTP {error.code})")
-              fail(f"Cloudflare Pages preflight failed (HTTP {error.code})")
+                  fail(f"Cloudflare token rejected or lacks Pages access (HTTP {error.code}){suffix}")
+              fail(f"Cloudflare Pages preflight failed (HTTP {error.code}){suffix}")
           except (URLError, TimeoutError):
               fail("Cloudflare Pages preflight could not reach the API")
           except (json.JSONDecodeError, UnicodeDecodeError):
               fail("Cloudflare Pages preflight returned an invalid response")
 
-          if not result.get("success") or result.get("result", {}).get("name") != project_name:
-              fail("Cloudflare token could not access the expected Pages project")
+          if not result.get("success"):
+              detail = api_error_detail(json.dumps(result).encode())
+              suffix = f"; {detail}" if detail else ""
+              fail(f"Cloudflare Pages API returned an unsuccessful response{suffix}")
+          if result.get("result", {}).get("name") != project_name:
+              fail("Cloudflare token can access Pages, but the expected project name did not match")
 
           print("Cloudflare API token and Pages project access validated")
           PY
