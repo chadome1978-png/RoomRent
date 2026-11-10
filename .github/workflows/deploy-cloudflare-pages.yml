@@ -22,7 +22,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Preflight Cloudflare API token and Pages project access
+      - name: Preflight Cloudflare API token and Pages deploy permission
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -92,7 +92,35 @@ jobs:
           if result.get("result", {}).get("name") != project_name:
               fail("Cloudflare token can access Pages, but the expected project name did not match")
 
-          print("Cloudflare API token and Pages project access validated")
+          upload_request = Request(
+              f"{url}/upload-token",
+              headers={"Authorization": f"Bearer {token}"},
+          )
+          try:
+              with urlopen(upload_request, timeout=20) as response:
+                  upload_result = json.loads(response.read())
+          except HTTPError as error:
+              detail = api_error_detail(error.read(65536))
+              suffix = f"; {detail}" if detail else ""
+              if error.code in (401, 403):
+                  fail(
+                      "Cloudflare token rejected or lacks Account > Cloudflare Pages > Edit "
+                      f"permission for Direct Upload (HTTP {error.code}){suffix}"
+                  )
+              fail(f"Cloudflare Pages deploy permission check failed (HTTP {error.code}){suffix}")
+          except (URLError, TimeoutError):
+              fail("Cloudflare Pages deploy permission check could not reach the API")
+          except (json.JSONDecodeError, UnicodeDecodeError):
+              fail("Cloudflare Pages deploy permission check returned an invalid response")
+
+          if not upload_result.get("success") or not isinstance(
+              upload_result.get("result", {}).get("jwt"), str
+          ):
+              detail = api_error_detail(json.dumps(upload_result).encode())
+              suffix = f"; {detail}" if detail else ""
+              fail(f"Cloudflare Pages upload-token permission check failed{suffix}")
+
+          print("Cloudflare Pages project and Direct Upload permission validated; temporary JWT discarded")
           PY
 
       - name: Set up pnpm
