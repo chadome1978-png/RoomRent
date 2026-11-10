@@ -22,6 +22,55 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Preflight Cloudflare API token and Pages project access
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from urllib.error import HTTPError, URLError
+          from urllib.request import Request, urlopen
+
+          account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+          project_name = "roomrent-local-pwa"
+
+          def fail(message):
+              print(f"::error::{message}", file=sys.stderr)
+              sys.exit(1)
+
+          if not re.fullmatch(r"[0-9a-fA-F]{32}", account_id):
+              fail("CLOUDFLARE_ACCOUNT_ID repository variable is missing or malformed")
+          if not token:
+              fail("CLOUDFLARE_API_TOKEN repository secret is missing")
+
+          url = (
+              "https://api.cloudflare.com/client/v4/accounts/"
+              f"{account_id}/pages/projects/{project_name}"
+          )
+          request = Request(url, headers={"Authorization": f"Bearer {token}"})
+          try:
+              with urlopen(request, timeout=20) as response:
+                  result = json.loads(response.read())
+          except HTTPError as error:
+              if error.code in (401, 403):
+                  fail(f"Cloudflare token rejected or lacks Pages access (HTTP {error.code})")
+              fail(f"Cloudflare Pages preflight failed (HTTP {error.code})")
+          except (URLError, TimeoutError):
+              fail("Cloudflare Pages preflight could not reach the API")
+          except (json.JSONDecodeError, UnicodeDecodeError):
+              fail("Cloudflare Pages preflight returned an invalid response")
+
+          if not result.get("success") or result.get("result", {}).get("name") != project_name:
+              fail("Cloudflare token could not access the expected Pages project")
+
+          print("Cloudflare API token and Pages project access validated")
+          PY
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -107,14 +156,6 @@ jobs:
           print("Supabase URL origin validated")
           print(f"Supabase key validated: {key_type}; value not printed")
           PY
-
-      - name: Validate Cloudflare deployment credentials
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID repository variable is required"; exit 1; }
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN repository secret is required"; exit 1; }
 
       - name: Build static site
         run: pnpm build:static
