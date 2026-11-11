@@ -65,6 +65,31 @@ jobs:
               fail("CLOUDFLARE_ACCOUNT_ID repository variable is missing or malformed")
           if not token:
               fail("CLOUDFLARE_API_TOKEN repository secret is missing")
+          if token != token.strip() or any(char.isspace() for char in token):
+              fail("CLOUDFLARE_API_TOKEN contains whitespace; value not printed")
+
+          verify_url = (
+              "https://api.cloudflare.com/client/v4/accounts/"
+              f"{account_id}/tokens/verify"
+          )
+          verify_request = Request(verify_url, headers={"Authorization": f"Bearer {token}"})
+          try:
+              with urlopen(verify_request, timeout=20) as response:
+                  verify_result = json.loads(response.read())
+          except HTTPError as error:
+              detail = api_error_detail(error.read(65536))
+              suffix = f"; {detail}" if detail else ""
+              fail(f"Cloudflare Account API token verification failed (HTTP {error.code}){suffix}")
+          except (URLError, TimeoutError):
+              fail("Cloudflare Account API token verification could not reach the API")
+          except (json.JSONDecodeError, UnicodeDecodeError):
+              fail("Cloudflare Account API token verification returned an invalid response")
+
+          if not verify_result.get("success") or verify_result.get("result", {}).get("status") != "active":
+              detail = api_error_detail(json.dumps(verify_result).encode())
+              suffix = f"; {detail}" if detail else ""
+              fail(f"Cloudflare Account API token is not active{suffix}")
+          print("Cloudflare Account API token verified active; value not printed")
 
           url = (
               "https://api.cloudflare.com/client/v4/accounts/"
