@@ -828,6 +828,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .cloud-account-content .supabase-login-form { grid-template-columns: 1fr; }
 .cloud-account-content .supabase-login-form .supabase-panel-actions { grid-column: 1; }
 .cloud-account-content .button { min-height: 40px; white-space: normal; text-align: left; }
+.email-verification-intro, .email-verification-hint { grid-column: 1 / -1; margin: 0; color: #aabdb1; font-size: 12px; line-height: 1.7; }
+.supabase-login-form.email-verification-form .supabase-panel-error, .supabase-login-form.email-verification-form .supabase-panel-message { grid-column: 1 / -1; font-size: 12px; line-height: 1.7; }
+.supabase-login-form.email-verification-form label { font-size: 12px; gap: 7px; }
+.supabase-login-form.email-verification-form input { min-height: 44px; font-size: 16px; }
+.supabase-login-form .email-verification-code { font-variant-numeric: tabular-nums; letter-spacing: .2em; }
+.email-verification-code::placeholder { letter-spacing: normal; font-size: 13px; }
+.email-verification-form input:disabled { opacity: .6; }
 @media screen and (max-width: 540px) {
   .cloud-account-main { width: min(100% - 24px, 920px); padding-top: 16px; }
   .cloud-account-brand { align-items: flex-start; flex-direction: column; gap: 8px; }

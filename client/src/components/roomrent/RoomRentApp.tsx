@@ -43,9 +43,11 @@ import {
   isSupabaseRoomsConfigured,
   onSupabaseRoomAuthChange,
   fetchSupabaseRooms,
+  resendSupabaseSignupConfirmation,
   signInToSupabaseRooms,
   signOutFromSupabaseRooms,
   signUpForSupabaseRooms,
+  verifySupabaseSignupOtp,
 } from "./supabaseRooms";
 import {
   currentPeriod,
@@ -311,8 +313,8 @@ export function RoomRentApp() {
     }
   }
 
-  async function signInSupabase(email: string, password: string) {
-    const user = await signInToSupabaseRooms(email, password);
+  async function signInSupabase(username: string, password: string) {
+    const user = await signInToSupabaseRooms(username, password);
     setSupabaseUser(user ? { id: user.id, email: user.email } : null);
     try {
       const account = await fetchSupabaseAccountData();
@@ -353,6 +355,13 @@ export function RoomRentApp() {
     setSupabaseUser(null);
     setLegacyRooms([]);
     setAccountData(emptyLocalDatabase(), 0, false);
+  }
+
+  async function verifySupabaseEmail(email: string, token: string) {
+    await verifySupabaseSignupOtp(email, token);
+    // verifyOtp publishes SIGNED_IN on the shared client. The existing listener
+    // loads only this owner's data and keeps the explicit backup/migration gate.
+    toast.success("ยืนยันอีเมลสำเร็จแล้ว กำลังโหลดบัญชี Cloud");
   }
 
   async function saveBill(values: InvoiceDraft) {
@@ -621,6 +630,8 @@ export function RoomRentApp() {
       busy={roomBusy}
       onSignIn={signInSupabase}
       onSignUp={signUpSupabase}
+      onResendVerification={resendSupabaseSignupConfirmation}
+      onVerifyEmailOtp={verifySupabaseEmail}
       onSignOut={signOutSupabase}
       onDownloadBackup={exportBackup}
       onMigrateLocalData={migrateLocalDataToCloud}
