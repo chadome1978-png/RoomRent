@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RentalRoom } from "./types";
+import { signInWithUsername } from "./usernameLogin";
+import { requestSignupVerificationCode, verifySignupEmailCode } from "./emailVerification";
 
 type RoomRow = {
   id: number;
@@ -92,10 +94,16 @@ export function onSupabaseRoomAuthChange(callback: (signedIn: boolean) => void) 
   return () => data.subscription.unsubscribe();
 }
 
-export async function signInToSupabaseRooms(email: string, password: string) {
-  const { data, error } = await getClient().auth.signInWithPassword({ email: email.trim(), password });
-  if (error) throw error;
-  return data.user;
+export async function signInToSupabaseRooms(username: string, password: string) {
+  return signInWithUsername(getClient(), username, password);
+}
+
+export async function resendSupabaseSignupConfirmation(email: string) {
+  await requestSignupVerificationCode(getClient(), email);
+}
+
+export async function verifySupabaseSignupOtp(email: string, token: string) {
+  return verifySignupEmailCode(getClient(), email, token);
 }
 
 export async function signUpForSupabaseRooms(email: string, password: string) {

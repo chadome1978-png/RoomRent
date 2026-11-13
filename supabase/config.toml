@@ -1,0 +1,3 @@
+[functions.login-with-username]
+# Login is intentionally unauthenticated; the function validates credentials via Supabase Auth.
+verify_jwt = false

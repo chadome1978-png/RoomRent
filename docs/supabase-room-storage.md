@@ -34,7 +34,7 @@ workflow นำค่าเหล่านี้มาใช้เฉพาะ�
 
 ## 3. การเข้าสู่ระบบและแหล่งข้อมูล
 
-หลัง deploy build ที่มีค่าตั้ง Supabase แอปจะแสดงหน้าเชื่อมต่อบัญชีและไม่แสดงข้อมูล local/Cloud จนกว่าจะยืนยัน session และโหลด account snapshot สำเร็จ ผู้ใช้ใหม่สามารถสมัคร email/password ได้ โดยการยืนยันอีเมลขึ้นกับค่า Auth Provider
+หลัง deploy build ที่มีค่าตั้ง Supabase แอปจะแสดงหน้าเชื่อมต่อบัญชีและไม่แสดงข้อมูล local/Cloud จนกว่าจะยืนยัน session และโหลด account snapshot สำเร็จ การสมัครบัญชีและส่งอีเมลยืนยันยังใช้ email/password; หลังเตรียม mapping และ deploy Edge Function ตาม [คู่มือ Username Login](./supabase-username-login.md) ผู้ใช้เข้าสู่ระบบด้วย username/password เช่น `bnkhouse`
 
 เมื่อเข้าสู่ระบบ:
 
@@ -67,6 +67,10 @@ workflow นำค่าเหล่านี้มาใช้เฉพาะ�
 
 - [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) — schema/RLS ของตารางห้องรุ่นเดิม
 - [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) — account snapshot table, RLS และ revision-checked save RPC
+- [`../supabase/login_names.sql`](../supabase/login_names.sql) — username mapping table ที่ไม่มีรหัสผ่านและปิด client access
+- [`../supabase/login_names_link_bnkhouse.sql`](../supabase/login_names_link_bnkhouse.sql) — ผูก username `bnkhouse` กับ Auth account ที่ยืนยันแล้ว (แทนอีเมลก่อนรัน)
+- [`../supabase/functions/login-with-username/index.ts`](../supabase/functions/login-with-username/index.ts) — Edge Function สำหรับ username sign-in ผ่าน Supabase Auth
+- [`./supabase-username-login.md`](./supabase-username-login.md) — ขั้นตอนตั้งค่า/deploy และทดสอบ Username Login
 - `client/src/components/roomrent/supabaseRooms.ts` — Supabase client, Auth และ legacy rooms read
 - `client/src/components/roomrent/supabaseAccountData.ts` — อ่าน/บันทึก account snapshot
 - `client/src/components/roomrent/accountMigration.ts` — ตรวจซ้ำ, map room references และ merge migration
