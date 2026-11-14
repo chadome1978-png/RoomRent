@@ -1,12 +1,12 @@
 # ตั้งค่าอีเมลยืนยัน OTP สำหรับ RoomRent
 
-คู่มือนี้แนะนำการใช้รหัส OTP เพื่อยืนยันอีเมลที่สมัคร RoomRent โดยคงการเข้าสู่ระบบปกติด้วยชื่อผู้ใช้/รหัสผ่าน ไม่ได้เพิ่มเมนูขอ OTP เพื่อล็อกอินแบบ passwordless ทั่วไป แต่การยืนยัน OTP ที่ถูกต้องจะสร้าง Auth session ในครั้งนั้นได้โดยไม่ต้องกรอกรหัสผ่านซ้ำ
+คู่มือนี้ครอบคลุมสอง flow ที่แยกกัน: สมัครบัญชีด้วยอีเมลและรหัสผ่านแล้วกรอกรหัส OTP ใน **Confirm sign up** template; และเข้าสู่ระบบบัญชีเดิมด้วยอีเมลและ OTP 6 หลักจาก **Magic link or OTP** template โดยไม่กรอกชื่อผู้ใช้หรือรหัสผ่าน
 
 ## ลำดับการนำไปใช้กับ Production
 
-เตรียมและเผยแพร่ frontend ที่มีปุ่ม “ยืนยันอีเมลด้วยรหัส OTP” ให้พร้อมก่อนแทน Confirm sign up template เป็น OTP-only เพื่อไม่ให้ผู้รับอีเมลไม่มีช่องกรอกรหัส จากนั้นตั้ง template/SMTP/ความยาวรหัสให้ตรงกันและทดสอบด้วยบัญชีทดสอบที่ได้รับอนุญาต; ไฟล์ HTML ใน repository ไม่อัปเดต template บน Hosted Supabase ให้อัตโนมัติ และการเพิ่ม OTP ไม่ต้อง deploy Edge Function ใหม่
+การเปลี่ยนแปลงใน source เพิ่มหน้าเข้าสู่ระบบอีเมล+OTP และฟอร์ม OTP ที่ใช้ได้ทั้ง sign-in/signup แต่ยังต้องตั้ง **ทั้ง** Confirm sign up และ Magic link or OTP templates บน Hosted Supabase แยกกันก่อนใช้งานจริง ไฟล์ HTML ใน repository ไม่อัปเดต Dashboard ให้อัตโนมัติ และการเข้าสู่ระบบแบบนี้ไม่ต้องใช้ Username Edge Function หรือ SQL mapping `login_names` หน้า code request ไม่ได้ sign in จนกว่า `verifyOtp` จะสำเร็จ
 
-ขณะตรวจงานวันที่ 13 พฤศจิกายน 2026 การตั้งค่า bound Manus project ยังรายงาน `publishing.auto_publish = true`; ยังไม่ push เพื่อบันทึก checkpoint เพราะอาจเริ่มการเผยแพร่ก่อนที่ผู้ใช้ต้องการ โปรดปิด Auto Publish ใน Dashboard ก่อนบันทึกงานแบบไม่เผยแพร่ และอนุญาตการ release แยกเมื่อพร้อม
+การเผยแพร่ production ของ repository นี้ทำผ่าน GitHub Actions เมื่อ merge ไป `main`; เป็นคนละกลไกกับ Manus Webdev Auto Publish และไม่ได้ปรับ Auto Publish ในคู่มือนี้ ก่อน merge/deploy ต้องตรวจว่า Supabase Production เปิดใช้ Custom SMTP และตั้ง **Magic link or OTP** template ให้แสดง `{{ .Token }}` มิฉะนั้นผู้ใช้อาจได้ลิงก์แทน OTP ที่หน้า Login ขอให้กรอก การตรวจ Dashboard วันที่ 14 พฤศจิกายน 2026 ยังแสดง default email templates และแจ้งให้ตั้ง Custom SMTP ก่อนแก้ template ได้ จึงยังไม่ผ่าน gate นี้
 
 ## ตั้งค่า Confirm sign up template
 
@@ -22,7 +22,7 @@ RoomRent — รหัสยืนยันอีเมล
 
 เทมเพลตนี้มีเพียงลิงก์คงที่ไปยังหน้าแอป `https://roomrent-local-pwa.pages.dev/` เพื่อให้ผู้ใช้กลับมาใส่รหัสในแอป ลิงก์ไม่ผูกกับบัญชีหรือ OTP และไม่มี query string; อย่าเพิ่มตัวแปรลิงก์ยืนยัน, token hash หรือรหัส OTP ลงใน URL วิธีนี้ไม่ทำให้การเปิดลิงก์จาก mail scanner ไปยืนยันบัญชีแทนผู้ใช้
 
-## Flow สมัคร ยืนยัน และขอรหัสใหม่
+## Flow สมัครและยืนยันอีเมล
 
 เมื่อสมัครด้วยอีเมลและรหัสผ่าน แอปเรียก `supabase.auth.signUp({ email, password })` ซึ่งส่งอีเมลจาก Confirm sign up template หากต้องการส่งอีเมลยืนยันใหม่ ให้เรียก `supabase.auth.resend({ type: 'signup', email })` ด้วยอีเมลเดิมและ shared Supabase client
 
@@ -42,9 +42,36 @@ supabase.auth.verifyOtp({ email, token, type: 'email' })
 
 หาก Dashboard แสดงการตั้งค่าความยาว OTP ให้ตรวจว่าตั้งไว้ 6 หลักให้ตรงกับช่อง OTP ของ RoomRent การเพิ่มช่อง 6 หลักในแอปไม่ได้เปลี่ยนการตั้งค่าฝั่ง Supabase และคู่มือนี้ไม่ได้ยืนยันว่าค่าปัจจุบันของโปรเจกต์เป็น 6 หลัก
 
+## ตั้งค่า Template สำหรับ passwordless sign-in
+
+ใน Supabase Dashboard ไปที่ **Authentication → Emails → Templates → Magic link or OTP** (ชื่อเมนูอาจต่างตาม Dashboard) ตั้ง Subject เช่น:
+
+```text
+RoomRent — รหัสเข้าสู่ระบบ
+```
+
+ใส่เนื้อหาจาก [`supabase/templates/magic-link-otp.html`](../supabase/templates/magic-link-otp.html) และต้องคง `{{ .Token }}` ไว้ โดย **ไม่ใช้ `{{ .ConfirmationURL }}`** หากต้องการรหัส 6 หลักแทน magic link; template นี้ใช้กับ sign-in ส่วน Confirm sign up ยังคงแยกกันตามคู่มือด้านบน [1][5]
+
+สำหรับระบบปัจจุบัน ผู้ใช้กรอกอีเมลแล้วแอปเรียก:
+
+```ts
+supabase.auth.signInWithOtp({
+  email,
+  options: { shouldCreateUser: false },
+})
+```
+
+`shouldCreateUser: false` ป้องกันการสมัครอัตโนมัติจากหน้าล็อกอิน สำหรับ request ที่สำเร็จ Supabase ส่ง `data.user` และ `data.session` เป็น `null`; อย่าเปิดข้อมูล Cloud จนกว่าจะตรวจรหัสด้วย:
+
+```ts
+supabase.auth.verifyOtp({ email, token, type: 'email' })
+```
+
+เมื่อยืนยันสำเร็จ shared Auth client จะรับ session แล้ว auth state listener เดิมจึงโหลด account gate/RLS ตามเดิม ระบบตอบข้อความกลาง ๆ (“หากอีเมลนี้มีบัญชี RoomRent ระบบจะส่งรหัส OTP ให้”) และไม่เรียก `login_names` หรือสร้างบัญชีใหม่ หากไม่พบอีเมล
+
 ## การเข้าสู่ระบบและขอบเขตข้อมูล
 
-OTP ใน flow นี้ใช้ยืนยันอีเมลจากการสมัครหรือการส่ง Confirm sign up ซ้ำเท่านั้น ไม่ใช้ `signInWithOtp` และไม่เปลี่ยนการเข้าสู่ระบบปกติด้วยชื่อผู้ใช้และรหัสผ่าน การยืนยันอีเมลด้วย OTP ไม่ได้สร้าง mapping ใน `login_names` ให้อัตโนมัติ ดังนั้นการเข้าสู่ระบบด้วยชื่อผู้ใช้ยังต้องมี mapping ที่ถูกต้องแยกต่างหาก รายการ mapping ของ `bnkhouse` ยังรอการยืนยัน Auth account ที่ถูกต้อง
+Login ใช้ passwordless email OTP สำหรับบัญชี Supabase Auth ที่มีอยู่; Signup ยังคงใช้อีเมลและรหัสผ่านและยืนยันด้วย Confirm sign up OTP แยกกัน การยืนยัน OTP ไม่ได้สร้างข้อมูลห้อง ไม่ได้เปลี่ยน RLS และไม่ข้าม account gate การทำงาน `login_names`/username mapping ไม่จำเป็นกับหน้า Login นี้และไม่มีการเรียกใช้จาก browser
 
 การยืนยันอีเมลเพียงทำให้บัญชีผ่านขั้นยืนยันและได้ session เมื่อสำเร็จ การเข้าถึงข้อมูลยังต้องผ่าน account gate และ RLS/migration flow ที่มีอยู่ ไม่มีการสร้างบัญชี Cloud เปล่า อัปโหลดข้อมูล หรือเขียนข้อมูล Cloud อัตโนมัติเพียงเพราะยืนยัน OTP สำเร็จ
 
@@ -61,9 +88,9 @@ SMTP เริ่มต้นของ Supabase เหมาะกับกา�
 1. สมัครด้วยอีเมลทดสอบและรหัสผ่าน แล้วตรวจว่าได้รับอีเมลหัวข้อที่ตั้งไว้
 2. อ่าน OTP จากอีเมล กรอกอีเมลกับรหัส 6 หลักใน RoomRent และตรวจว่าการยืนยันสำเร็จพร้อมเข้าสู่ account gate เดิม
 3. ทดสอบรหัสผิดและรหัสหมดอายุว่าถูกปฏิเสธโดยไม่สร้าง session และตรวจว่าข้อความแสดงข้อผิดพลาดไม่เปิดเผยข้อมูลบัญชี
-4. ทดสอบขอรหัสซ้ำ ตรวจข้อความตอบกลับแบบกลาง ๆ และปุ่ม cooldown 60 วินาที แล้วตรวจว่าบัญชีที่ยืนยันแล้วเข้าได้ด้วย username ที่ผู้ดูแลผูกไว้กับรหัสผ่านตาม flow ปกติ; หากยังไม่มี mapping จะยังเข้าแบบ username ไม่ได้ แม้ยืนยันอีเมลสำเร็จแล้ว
+4. ทดสอบ passwordless sign-in ด้วยบัญชี Auth ที่มีอยู่: กรอกอีเมล ขอ OTP, ตรวจอีเมลและป้อนรหัส 6 หลัก; ทดสอบอีเมลที่ไม่มีบัญชีว่าข้อความตอบกลับยังเป็นกลางและระบบไม่สร้างบัญชีใหม่; ยืนยันว่าการขอรหัสซ้ำมี cooldown 60 วินาที และหลัง OTP สำเร็จโหลดข้อมูลผ่าน account gate/RLS เดิม
 
-**สถานะงาน:** ไฟล์แนะนำและการเปลี่ยนแปลง source ที่เตรียมสำหรับ OTP เป็นการเปลี่ยนแปลงในเครื่องเท่านั้น งานนี้ยังไม่ได้เปลี่ยน template หรือ SMTP บน Supabase production, ไม่ได้ publish frontend และไม่ได้ส่งอีเมลหรือรัน live E2E test
+**สถานะงาน:** code/UI/documentation เป็น source change ในเครื่องและผ่าน local checks; งานนี้ไม่ได้เปลี่ยน Supabase Production templates/SMTP, ไม่ได้ publish frontend และไม่ได้ส่งอีเมลหรือรัน live E2E test การใช้งานจริงต้องเผยแพร่ frontend รุ่นใหม่นี้และตั้ง Magic link or OTP template ให้ใช้ `{{ .Token }}`; Custom SMTP ยังไม่ได้ตรวจหรือทดสอบในงานนี้
 
 ## References
 
@@ -71,3 +98,4 @@ SMTP เริ่มต้นของ Supabase เหมาะกับกา�
 [2]: https://supabase.com/docs/reference/javascript/auth-verifyotp "Supabase JavaScript verifyOtp"
 [3]: https://supabase.com/docs/guides/auth/auth-email-passwordless "Supabase passwordless email authentication"
 [4]: https://supabase.com/docs/guides/auth/auth-smtp "Supabase custom SMTP"
+[5]: https://supabase.com/docs/reference/javascript/auth-signinwithotp "Supabase JavaScript signInWithOtp"

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Cloud, CloudOff, Database, LoaderCircle, LogIn, LogOut, ShieldCheck, UploadCloud } from "lucide-react";
 import type { LocalDatabase } from "./types";
-import { getUsernameLoginErrorMessage } from "./usernameLogin";
 import { EmailVerificationForm } from "./EmailVerificationForm";
-import { EMAIL_VERIFICATION_COOLDOWN } from "./emailVerification";
+import { EMAIL_VERIFICATION_COOLDOWN, getEmailVerificationErrorMessage } from "./emailVerification";
 
 type Props = {
   configured: boolean;
@@ -14,7 +13,7 @@ type Props = {
   sourceData: LocalDatabase;
   error: string;
   busy: boolean;
-  onSignIn(username: string, password: string): Promise<void>;
+  onSignIn(email: string): Promise<void>;
   onSignUp(email: string, password: string): Promise<boolean>;
   onResendVerification(email: string): Promise<void>;
   onVerifyEmailOtp(email: string, token: string): Promise<void>;
@@ -29,6 +28,7 @@ export function SupabaseAccountPanel({ configured, loading, email, ready, hasClo
   const [emailInput, setEmailInput] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [showVerification, setShowVerification] = useState(false);
+  const [verificationPurpose, setVerificationPurpose] = useState<"signup" | "signin">("signup");
   const [password, setPassword] = useState("");
   const [backupChecked, setBackupChecked] = useState(false);
   const [backupDownloaded, setBackupDownloaded] = useState(false);
@@ -48,20 +48,33 @@ export function SupabaseAccountPanel({ configured, loading, email, ready, hasClo
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy || actionBusy) return;
+    if (mode === "signin" && resendCooldown > 0) {
+      setFormError(`ขอรหัส OTP ใหม่ได้ใน ${resendCooldown} วินาที`);
+      return;
+    }
     setActionBusy(true);
     setFormError("");
     setMessage("");
     try {
-      if (mode === "signin") await onSignIn(emailInput, password);
-      else if (await onSignUp(emailInput, password)) {
+      if (mode === "signin") {
+        const targetEmail = emailInput.trim();
+        setResendCooldown(EMAIL_VERIFICATION_COOLDOWN);
+        await onSignIn(targetEmail);
+        setVerificationEmail(targetEmail);
+        setVerificationPurpose("signin");
+        setPassword("");
+        setShowVerification(true);
+        setMessage("หากอีเมลนี้มีบัญชี RoomRent ระบบจะส่งรหัส OTP ให้ โปรดตรวจสอบกล่องจดหมายและ Spam/Junk");
+      } else if (await onSignUp(emailInput, password)) {
         setVerificationEmail(emailInput.trim());
+        setVerificationPurpose("signup");
         setPassword("");
         setShowVerification(true);
         setResendCooldown(EMAIL_VERIFICATION_COOLDOWN);
         setMessage("ส่งคำขอสมัครแล้ว โปรดใช้รหัส OTP จากอีเมลฉบับล่าสุดเพื่อยืนยันบัญชี");
       }
     } catch (error) {
-      setFormError(mode === "signin" ? getUsernameLoginErrorMessage(error) : "สร้างบัญชีไม่สำเร็จ โปรดลองอีกครั้ง");
+      setFormError(mode === "signin" ? getEmailVerificationErrorMessage(error) : "สร้างบัญชีไม่สำเร็จ โปรดลองอีกครั้ง");
     } finally {
       setActionBusy(false);
     }
@@ -69,6 +82,7 @@ export function SupabaseAccountPanel({ configured, loading, email, ready, hasClo
 
   function openVerification() {
     setVerificationEmail(mode === "signup" ? emailInput.trim() : "");
+    setVerificationPurpose("signup");
     setPassword("");
     setFormError("");
     setMessage("");
@@ -138,23 +152,26 @@ export function SupabaseAccountPanel({ configured, loading, email, ready, hasClo
   return (
     <section className="supabase-rooms-panel supabase-login-panel" aria-labelledby="supabase-account-title">
       <div className="supabase-panel-icon"><Cloud size={19} /></div>
-      <div className="supabase-panel-copy"><strong id="supabase-account-title">{showVerification ? "ยืนยันอีเมลด้วยรหัส OTP" : mode === "signin" ? "เข้าสู่ระบบ Supabase" : "สร้างบัญชี Supabase"}</strong><span>ข้อมูลในอุปกรณ์จะไม่ถูกอัปโหลดโดยอัตโนมัติ</span></div>
+      <div className="supabase-panel-copy"><strong id="supabase-account-title">{showVerification ? verificationPurpose === "signin" ? "เข้าสู่ระบบด้วยรหัส OTP" : "ยืนยันอีเมลด้วยรหัส OTP" : mode === "signin" ? "เข้าสู่ระบบ RoomRent" : "สร้างบัญชี Supabase"}</strong><span>ข้อมูลในอุปกรณ์จะไม่ถูกอัปโหลดโดยอัตโนมัติ</span></div>
       {showVerification ? (
         <EmailVerificationForm
+          key={verificationPurpose}
+          purpose={verificationPurpose}
           initialEmail={verificationEmail}
           busy={busy || actionBusy}
           resendCooldown={resendCooldown}
           onStartCooldown={setResendCooldown}
-          onResend={onResendVerification}
+          onRequestCode={verificationPurpose === "signin" ? onSignIn : onResendVerification}
           onVerify={onVerifyEmailOtp}
-          onBack={() => { setShowVerification(false); setVerificationEmail(""); setMode("signin"); setEmailInput(""); setPassword(""); setFormError(""); setMessage(""); }}
+          onBack={() => { setShowVerification(false); setEmailInput(verificationEmail); setPassword(""); setMode("signin"); setFormError(""); setMessage(""); }}
         />
       ) : (
         <form className="supabase-login-form" onSubmit={event => void submit(event)}>
-          <label><span>{mode === "signin" ? "ชื่อผู้ใช้" : "อีเมล"}</span><input type={mode === "signin" ? "text" : "email"} autoComplete={mode === "signin" ? "username" : "email"} autoCapitalize="none" spellCheck={false} placeholder={mode === "signin" ? "เช่น bnkhouse" : undefined} required disabled={busy || actionBusy} value={emailInput} onChange={event => setEmailInput(event.target.value)} /></label>
-          <label><span>{mode === "signin" ? "รหัสผ่าน" : "รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)"}</span><input type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={mode === "signup" ? 8 : undefined} required disabled={busy || actionBusy} value={password} onChange={event => setPassword(event.target.value)} /></label>
-          <div className="supabase-panel-actions"><button type="submit" className="button button-primary button-sm" disabled={busy || actionBusy}><LogIn size={15} />{actionBusy ? "กำลังดำเนินการ…" : mode === "signin" ? "เข้าสู่ระบบ" : "สร้างบัญชี"}</button><button type="button" className="button button-quiet button-sm" disabled={busy || actionBusy} onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setEmailInput(""); setPassword(""); setFormError(""); setMessage(""); }}>{mode === "signin" ? "สมัครบัญชีใหม่" : "มีบัญชีแล้ว · เข้าสู่ระบบ"}</button></div>
-          <div className="supabase-panel-actions"><button type="button" className="button button-outline button-sm" disabled={busy || actionBusy} onClick={openVerification}>ยืนยันอีเมลด้วยรหัส OTP</button></div>
+          <label><span>อีเมล</span><input type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254} disabled={busy || actionBusy} value={emailInput} onChange={event => { setEmailInput(event.target.value); setFormError(""); setMessage(""); }} /></label>
+          {mode === "signup" && <label><span>รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</span><input type="password" autoComplete="new-password" minLength={8} required disabled={busy || actionBusy} value={password} onChange={event => setPassword(event.target.value)} /></label>}
+          {mode === "signin" && <p className="email-verification-intro">ระบบจะส่งรหัส OTP 6 หลักไปยังอีเมลของบัญชี RoomRent ไม่ต้องใช้ชื่อผู้ใช้หรือรหัสผ่าน</p>}
+          <div className="supabase-panel-actions"><button type="submit" className="button button-primary button-sm" disabled={busy || actionBusy}><LogIn size={15} />{actionBusy ? "กำลังดำเนินการ…" : mode === "signin" ? "ส่งรหัส OTP" : "สร้างบัญชี"}</button><button type="button" className="button button-quiet button-sm" disabled={busy || actionBusy} onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setEmailInput(""); setPassword(""); setResendCooldown(0); setFormError(""); setMessage(""); }}>{mode === "signin" ? "สมัครบัญชีใหม่" : "มีบัญชีแล้ว · เข้าสู่ระบบ"}</button></div>
+          {mode === "signup" && <div className="supabase-panel-actions"><button type="button" className="button button-outline button-sm" disabled={busy || actionBusy} onClick={openVerification}>มีรหัส OTP เพื่อยืนยันอีเมลแล้ว</button></div>}
         </form>
       )}
       {displayError && <p className="supabase-panel-error" role="alert">{displayError}</p>}

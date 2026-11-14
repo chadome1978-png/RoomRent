@@ -5,6 +5,7 @@ import {
   EmailVerificationError,
   getEmailVerificationErrorMessage,
   isVerificationEmail,
+  requestPasswordlessSignInCode,
   requestSignupVerificationCode,
   verifySignupEmailCode,
 } from "./emailVerification";
@@ -15,7 +16,7 @@ function fixture() {
   const verifyOtp = vi.fn().mockResolvedValue({ data: { user, session }, error: null });
   const resend = vi.fn().mockResolvedValue({ data: { user: null, session: null }, error: null });
   const signUp = vi.fn();
-  const signInWithOtp = vi.fn();
+  const signInWithOtp = vi.fn().mockResolvedValue({ data: { user: null, session: null }, error: null });
   const from = vi.fn();
   return { user, session, verifyOtp, resend, signUp, signInWithOtp, from,
     client: { auth: { verifyOtp, resend, signUp, signInWithOtp }, from } as unknown as Pick<SupabaseClient, "auth"> };
@@ -34,6 +35,16 @@ describe("RoomRent signup Email OTP — mocks only, no network or real email", (
     expect(EMAIL_VERIFICATION_COOLDOWN).toBe(60);
   });
 
+  it("requests passwordless login OTP for existing users only and never reads account tables", async () => {
+    const f = fixture();
+    await requestPasswordlessSignInCode(f.client, " owner@example.invalid ");
+    expect(f.signInWithOtp).toHaveBeenCalledWith({ email: "owner@example.invalid", options: { shouldCreateUser: false } });
+    expect(f.signUp).not.toHaveBeenCalled();
+    expect(f.resend).not.toHaveBeenCalled();
+    expect(f.verifyOtp).not.toHaveBeenCalled();
+    expect(f.from).not.toHaveBeenCalled();
+  });
+
   it("preserves leading zeros and uses type email on the same Auth client", async () => {
     const f = fixture();
     expect(await verifySignupEmailCode(f.client, " owner@example.invalid ", " 001234 ")).toEqual(f.user);
@@ -45,6 +56,7 @@ describe("RoomRent signup Email OTP — mocks only, no network or real email", (
   it.each(["", "not-email", "a@", "a b@example.invalid", "a".repeat(255) + "@example.invalid"])("rejects invalid email locally", async email => {
     const f = fixture();
     await expect(requestSignupVerificationCode(f.client, email)).rejects.toMatchObject({ code: "email" });
+    await expect(requestPasswordlessSignInCode(f.client, email)).rejects.toMatchObject({ code: "email" });
     await expect(verifySignupEmailCode(f.client, email, "001234")).rejects.toMatchObject({ code: "email" });
     expect(f.resend).not.toHaveBeenCalled();
     expect(f.verifyOtp).not.toHaveBeenCalled();
@@ -70,25 +82,33 @@ describe("RoomRent signup Email OTP — mocks only, no network or real email", (
     f.resend.mockResolvedValue({ data: null, error });
     await expect(verifySignupEmailCode(f.client, "owner@example.invalid", "001234")).rejects.toMatchObject({ code: "rate_limited" });
     await expect(requestSignupVerificationCode(f.client, "owner@example.invalid")).rejects.toMatchObject({ code: "rate_limited" });
+    f.signInWithOtp.mockResolvedValue({ data: null, error });
+    await expect(requestPasswordlessSignInCode(f.client, "owner@example.invalid")).rejects.toMatchObject({ code: "rate_limited" });
   });
 
   it.each([{ name: "AuthRetryableFetchError" }, { code: "request_timeout" }, new TypeError("private network detail")])("handles network errors safely", async error => {
     const f = fixture();
     f.verifyOtp.mockRejectedValue(error);
+    f.signInWithOtp.mockRejectedValue(error);
     await expect(verifySignupEmailCode(f.client, "owner@example.invalid", "001234")).rejects.toMatchObject({ code: "network" });
+    await expect(requestPasswordlessSignInCode(f.client, "owner@example.invalid")).rejects.toMatchObject({ code: "network" });
   });
 
   it.each(["user_not_found", "user_already_exists", "email_exists", "email_not_confirmed", "invalid_credentials"])("keeps resend account state neutral for %s", async code => {
     const f = fixture();
     f.resend.mockResolvedValue({ data: null, error: { code } });
     await expect(requestSignupVerificationCode(f.client, "owner@example.invalid")).resolves.toBeUndefined();
+    f.signInWithOtp.mockResolvedValue({ data: null, error: { code } });
+    await expect(requestPasswordlessSignInCode(f.client, "owner@example.invalid")).resolves.toBeUndefined();
   });
 
   it.each(["email_address_not_authorized", "otp_disabled", "email_provider_disabled", "unexpected_failure"])("handles configuration/service errors without identifying account: %s", async code => {
     const f = fixture();
     f.verifyOtp.mockResolvedValue({ data: null, error: { code, message: "private detail" } });
     f.resend.mockResolvedValue({ data: null, error: { code, message: "private detail" } });
+    f.signInWithOtp.mockResolvedValue({ data: null, error: { code, message: "private detail" } });
     await expect(requestSignupVerificationCode(f.client, "owner@example.invalid")).rejects.toMatchObject({ code: "unavailable" });
+    await expect(requestPasswordlessSignInCode(f.client, "owner@example.invalid")).rejects.toMatchObject({ code: "unavailable" });
     await expect(verifySignupEmailCode(f.client, "owner@example.invalid", "001234")).rejects.toMatchObject({ code: "unavailable" });
   });
 
