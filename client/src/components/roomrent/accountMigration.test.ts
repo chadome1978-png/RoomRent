@@ -35,7 +35,7 @@ describe("RoomRent account-data migration", () => {
 
   it("deduplicates an identical bill while preserving unique expenses and local settings", () => {
     const current = { ...emptyLocalDatabase(), rooms: [room(5)], invoices: [invoice(20, 5)] };
-    const local = { ...emptyLocalDatabase(), invoices: [invoice(20, 5)], expenses: [{ id: 30, date: "2026-01-02", category: "maintenance" as const, description: "ค่าซ่อมทดสอบ", amount: 100, note: "", createdAt: "2026-01-02T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z" }], promptPay: { id: "0812345678", recipientName: "เจ้าของทดสอบ" } };
+    const local = { ...emptyLocalDatabase(), invoices: [invoice(20, 5)], expenses: [{ id: 30, date: "2026-01-02", category: "maintenance" as const, description: "ค่าซ่อมทดสอบ", amount: 100, note: "", createdAt: "2026-01-02T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z" }], promptPay: { id: "TEST-PP-001", recipientName: "เจ้าของทดสอบ" } };
     const merged = mergeMigrationData(current, local, []);
 
     expect(merged.invoices).toHaveLength(1);
@@ -44,8 +44,8 @@ describe("RoomRent account-data migration", () => {
   });
 
   it("stops when Cloud and device PromptPay settings disagree", () => {
-    const current = { ...emptyLocalDatabase(), promptPay: { id: "0812345678", recipientName: "เจ้าของทดสอบ" } };
-    const local = { ...emptyLocalDatabase(), promptPay: { id: "1234567890123", recipientName: "เจ้าของอีกคน" } };
+    const current = { ...emptyLocalDatabase(), promptPay: { id: "TEST-PP-001", recipientName: "เจ้าของทดสอบ" } };
+    const local = { ...emptyLocalDatabase(), promptPay: { id: "TEST-PP-002", recipientName: "เจ้าของอีกคน" } };
     expect(() => mergeMigrationData(current, local, [])).toThrow(/PromptPay/);
   });
 

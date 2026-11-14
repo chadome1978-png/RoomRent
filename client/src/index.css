@@ -474,6 +474,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     cursor: pointer;
   }
   .local-storage-strip button:hover { background: #24382e; color: #a4e5d2; }
+  .public-data-warning, .local-data-notice {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border: 1px solid #735238;
+    border-radius: 10px;
+    background: linear-gradient(100deg, #34271e, #2b251e);
+    color: #f0d3a8;
+    font-size: 12px;
+  }
+  .public-data-warning > div, .local-data-notice > div { display: grid; gap: 4px; }
+  .public-data-warning strong, .local-data-notice strong { color: #ffe0ae; font-size: 13px; }
+  .public-data-warning span, .local-data-notice span { line-height: 1.55; }
+  .public-data-warning > svg { flex: 0 0 auto; color: #efb86e; }
+  .local-data-notice { align-items: center; border-color: #354c40; background: #1c2922; color: #b7d6c1; }
+  .local-data-notice strong { color: #d2ead8; }
+  .local-data-notice button, .public-load-error button { flex: 0 0 auto; }
+  .public-load-error { justify-content: space-between; gap: 12px; }
   .storage-warning { margin: -8px 0 18px; }
   .local-backup-link {
     display: inline-flex;
@@ -522,6 +543,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .data-local-summary span { color: #a4b9aa; font-size: 11px; }
   .data-tools-body > p { margin: 0; color: #aab6ac; font-size: 12px; line-height: 1.75; }
   .data-tool-button { width: 100%; justify-content: center; }
+  .backup-confirmation { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #59472a; border-radius: 10px; background: #30291e; color: #e6d4ac; cursor: pointer; font-size: 11px; line-height: 1.65; }
+  .backup-confirmation input { flex: 0 0 18px; width: 18px; height: 18px; margin: 1px 0 0; accent-color: #55c9b2; }
+  .backup-confirmation input:disabled { cursor: not-allowed; }
+  .backup-confirmation.is-ready { border-color: #38614e; background: #1b2c24; color: #d9ebdd; }
   .data-tools-body .dialog-footer { justify-content: flex-end; padding: 3px 0 0; border: 0; }
   .visually-hidden {
     position: absolute !important;
