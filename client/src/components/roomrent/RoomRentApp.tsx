@@ -44,10 +44,10 @@ import {
   onSupabaseRoomAuthChange,
   fetchSupabaseRooms,
   resendSupabaseSignupConfirmation,
-  signInToSupabaseRooms,
+  requestSupabaseEmailSignInOtp,
   signOutFromSupabaseRooms,
   signUpForSupabaseRooms,
-  verifySupabaseSignupOtp,
+  verifySupabaseEmailOtp,
 } from "./supabaseRooms";
 import {
   currentPeriod,
@@ -313,23 +313,6 @@ export function RoomRentApp() {
     }
   }
 
-  async function signInSupabase(username: string, password: string) {
-    const user = await signInToSupabaseRooms(username, password);
-    setSupabaseUser(user ? { id: user.id, email: user.email } : null);
-    try {
-      const account = await fetchSupabaseAccountData();
-      const previousRooms = account.document?.legacyRoomsImported ? [] : await fetchLegacyRooms();
-      setLegacyRooms(previousRooms);
-      const local = readLocalDatabase();
-      const needsExplicitMigration = local.rooms.length + local.invoices.length + local.expenses.length > 0 || Boolean(local.promptPay) || previousRooms.length > 0;
-      setAccountData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document) && !needsExplicitMigration);
-      setSupabaseError(needsExplicitMigration ? "พบข้อมูลเดิมในอุปกรณ์หรือตารางห้องแบบเก่า โปรดสำรองและยืนยันการรวมก่อนใช้งานต่อ" : "");
-    } catch {
-      setAccountData(emptyLocalDatabase(), 0, false);
-      setSupabaseError("ยังโหลดข้อมูลไม่ได้ โปรดตรวจว่าติดตั้ง SQL schema และ RLS ของ RoomRent แล้ว");
-    }
-  }
-
   async function signUpSupabase(email: string, password: string) {
     const result = await signUpForSupabaseRooms(email, password);
     if (result.user && !result.needsEmailConfirmation) {
@@ -358,7 +341,7 @@ export function RoomRentApp() {
   }
 
   async function verifySupabaseEmail(email: string, token: string) {
-    await verifySupabaseSignupOtp(email, token);
+    await verifySupabaseEmailOtp(email, token);
     // verifyOtp publishes SIGNED_IN on the shared client. The existing listener
     // loads only this owner's data and keeps the explicit backup/migration gate.
     toast.success("ยืนยันอีเมลสำเร็จแล้ว กำลังโหลดบัญชี Cloud");
@@ -628,7 +611,7 @@ export function RoomRentApp() {
       sourceData={migrationPreview()}
       error={supabaseError}
       busy={roomBusy}
-      onSignIn={signInSupabase}
+      onSignIn={requestSupabaseEmailSignInOtp}
       onSignUp={signUpSupabase}
       onResendVerification={resendSupabaseSignupConfirmation}
       onVerifyEmailOtp={verifySupabaseEmail}

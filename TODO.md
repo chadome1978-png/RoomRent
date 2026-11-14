@@ -21,7 +21,7 @@
 
 - 12 พฤศจิกายน 2026: `supabase/login_names.sql` และ `supabase/login_rate_limits.sql` ติดตั้งใน project `etsguakphlytlvzotmor`; schema `roomrent_internal.username_login_limits` เปิด RLS และไม่มี client grants; RPC `consume_roomrent_username_login_rate_limit` execute ได้เฉพาะ `service_role`
 - 12 พฤศจิกายน 2026: deploy `login-with-username` สำเร็จด้วย `Verify JWT with legacy secret` เป็น OFF; อ่าน source จาก Dashboard Code tab หลัง deploy แล้ว SHA-256 ของ `index.ts` และ `rateLimit.ts` ตรงกับไฟล์ local ทุกประการ; smoke test แบบไม่ส่ง credentials ให้ผล 405 จาก Production origin ที่อนุญาต และ 403 จาก origin อื่น; ไม่ได้ทดสอบการเข้าสู่ระบบจริงหรือส่งอีเมล
-- ยังไม่ได้ผูก `bnkhouse` กับบัญชี Supabase Auth ที่ยืนยันแล้ว และยังไม่ได้เผยแพร่ frontend Username Login ไป Cloudflare Pages; ต้องมี verified Auth account/email ที่ผู้ใช้ยืนยันก่อน จึงจะทำ mapping และ release ให้ครบได้
+- [Superseded 14 พฤศจิกายน 2026] Username mapping ไม่จำเป็นสำหรับหน้า Login ปัจจุบัน ซึ่งใช้ Email OTP สำหรับบัญชีเดิม; legacy `login-with-username` ยังคงอยู่แต่ current UI ไม่เรียกใช้งาน
 
 ## Rate limit สำหรับ Username Login
 
@@ -32,3 +32,9 @@
 - 12 พฤศจิกายน 2026: `pnpm check`, `pnpm test` (52 tests/7 files รวม 25 mock Username Login tests และ 9 rate-limit helper tests), `pnpm build:static`, `node --check client/public/sw.js`, `npx deno check supabase/functions/login-with-username/index.ts`, PGlite SQL behavior/grant checks และ `git diff --check` ผ่าน; read-only review ไม่พบ blocker ใน flow หน้า Login → adapter → Edge Function → setSession → account gate; ยังไม่ทดสอบ E2E กับบัญชี Auth จริง
 
 - 13 พฤศจิกายน 2026: เพิ่ม EmailVerificationForm/helper และ 45 OTP/mock/SSR tests; `pnpm check`, `pnpm test` รวม 97 tests/9 files, `pnpm build:static`, service worker syntax และ diff checks ผ่าน; read-only review ไม่พบ blocker ของ OTP flow; ไม่มีการส่งอีเมลจริงหรือ live E2E; ไม่เปลี่ยน Supabase Production template/SMTP/Auth account และไม่ push/deploy เพราะ Auto Publish ของ bound project ยัง ON; OTP source อยู่ใน working tree และต้องเผยแพร่ frontend/ตั้ง template ตามคู่มือก่อนใช้ Production
+
+## Passwordless Email OTP Login (14 พฤศจิกายน 2026)
+
+- [x] หน้า Login ให้ผู้ใช้ที่มีบัญชีเดิมกรอกอีเมลเพื่อขอ OTP 6 หลัก แล้วกรอก OTP เพื่อเข้าสู่ระบบ; request ใช้ Supabase Auth `signInWithOtp` พร้อม `shouldCreateUser: false` และยังไม่ให้ session จน `verifyOtp` สำเร็จ; ไม่มีช่อง username/password ใน Login; สมัครบัญชีใหม่ยังคงอีเมล+รหัสผ่านและ flow ยืนยัน signup OTP แยก; หลังยืนยัน Auth session ระบบใช้ account/migration gate และ RLS เดิม; UI มีการจัดการ resend/cooldown/error โดยไม่เปิดเผย raw Auth error; ไม่มีการเรียก `login_names` จากหน้าเว็บ
+- [ ] ก่อน merge/deploy Production: Supabase Production **Magic link or OTP** template ต้องแสดง `{{ .Token }}` และใช้ Custom SMTP ที่บันทึกครบ เพื่อให้ผู้ใช้ได้รับ OTP แทน confirmation link; ตรวจ live template + delivery readiness ก่อนเปลี่ยนหน้า Production ให้เป็น OTP-only
+- 14 พฤศจิกายน 2026: release branch `feature/passwordless-email-otp-20261114` สร้างจาก `origin/main` SHA `55c0a1fd`; read-only review ไม่พบ code-level blocker; การตรวจใน BNK Dashboard ยังแสดง default email templates และแจ้งให้ตั้ง Custom SMTP ก่อนแก้ template ได้; ยังไม่ merge, deploy หรือเปลี่ยน Supabase settings
