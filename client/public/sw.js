@@ -1,4 +1,4 @@
-const CACHE_NAME = "roomrent-pwa-v10";
+const CACHE_NAME = "roomrent-pwa-v11";
 const APP_ROOT = new URL("./", self.registration.scope).href;
 const REQUIRED_FILES = [
   APP_ROOT,

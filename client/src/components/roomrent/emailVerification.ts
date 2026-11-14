@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const messages = {
-  email: "กรุณากรอกอีเมลที่ใช้สมัครให้ถูกต้อง",
+  email: "กรุณากรอกอีเมลที่ถูกต้อง",
   format: "กรุณากรอกรหัส OTP เป็นตัวเลข 6 หลัก",
   invalid: "รหัส OTP ไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว กรุณาขอรหัสใหม่และใช้รหัสจากอีเมลฉบับล่าสุด",
   rate_limited: "ส่งคำขอถี่เกินไป กรุณารอสักครู่ก่อนลองใหม่ หากยังไม่ได้ให้ลองอีกครั้งภายหลัง",
@@ -73,7 +73,24 @@ export async function requestSignupVerificationCode(client: AuthClient, emailInp
   }
 }
 
-/** The SDK installs the verified Auth session on this same client. No manual table update. */
+/** Request passwordless OTP for an existing account only; do not auto-create users. */
+export async function requestPasswordlessSignInCode(client: AuthClient, emailInput: string): Promise<void> {
+  const email = emailInput.trim();
+  if (!isVerificationEmail(email)) throw new EmailVerificationError("email");
+  try {
+    const { error } = await client.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    if (error) {
+      const { code } = errorMetadata(error);
+      // Keep the UI response neutral for account-state errors.
+      if (["user_not_found", "user_already_exists", "email_exists", "email_not_confirmed", "invalid_credentials"].includes(code ?? "")) return;
+      throw safeAuthError(error);
+    }
+  } catch (error) {
+    throw safeAuthError(error);
+  }
+}
+
+/** The SDK installs the verified signup/sign-in Auth session on this same client. */
 export async function verifySignupEmailCode(client: AuthClient, emailInput: string, tokenInput: string) {
   const email = emailInput.trim();
   const token = tokenInput.trim();
