@@ -2,14 +2,17 @@ import { useState } from "react";
 import { QrCode, X } from "lucide-react";
 import type { PromptPaySettings } from "./types";
 import { isValidPromptPayId, normalizePromptPayId } from "./promptpay";
+import { getPromptPayStorageDisclosure } from "./storageCopy";
 
 type Props = {
+  isSharedDataset: boolean;
   settings?: PromptPaySettings;
   onClose: () => void;
   onSave: (settings: PromptPaySettings) => void;
 };
 
-export function PromptPaySettingsDialog({ settings, onClose, onSave }: Props) {
+export function PromptPaySettingsDialog({ isSharedDataset, settings, onClose, onSave }: Props) {
+  const storageDisclosure = getPromptPayStorageDisclosure(isSharedDataset);
   const [id, setId] = useState(settings?.id ?? "");
   const [recipientName, setRecipientName] = useState(settings?.recipientName ?? "");
   const [error, setError] = useState("");
@@ -45,8 +48,8 @@ export function PromptPaySettingsDialog({ settings, onClose, onSave }: Props) {
         </header>
         <form className="dialog-form payment-settings-form" onSubmit={save}>
           <div className="payment-settings-notice">
-            <strong>ข้อมูลเก็บในอุปกรณ์นี้เท่านั้น</strong>
-            <span>PromptPay ID จะถูกฝังใน QR และอยู่ในไฟล์สำรองของคุณ ผู้ที่เห็นหรือได้รับบิลอาจอ่าน ID นี้ได้</span>
+            <strong>{storageDisclosure.title}</strong>
+            <span>{storageDisclosure.description}</span>
           </div>
           <label className="field">
             <span>PromptPay ID *</span>

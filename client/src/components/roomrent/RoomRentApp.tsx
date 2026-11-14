@@ -590,7 +590,7 @@ export function RoomRentApp() {
       {roomDialog && <RoomDialog room={editingRoom} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
       {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
       {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
-      {expenseDialogOpen && <ExpenseDialog expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}
+      {expenseDialogOpen && <ExpenseDialog isSharedDataset={isSupabaseRoomsConfigured} expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}
       {dataToolsOpen && (
         <div className="dialog-scrim" role="presentation" onMouseDown={event => event.target === event.currentTarget && setDataToolsOpen(false)}>
           <section className="dialog-panel data-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="data-tools-title">
@@ -620,7 +620,7 @@ export function RoomRentApp() {
           </section>
         </div>
       )}
-      {promptPaySettingsOpen && <PromptPaySettingsDialog settings={data.promptPay} onClose={() => setPromptPaySettingsOpen(false)} onSave={savePromptPaySettings} />}
+      {promptPaySettingsOpen && <PromptPaySettingsDialog isSharedDataset={isSupabaseRoomsConfigured} settings={data.promptPay} onClose={() => setPromptPaySettingsOpen(false)} onSave={savePromptPaySettings} />}
     </div>
   );
 }
