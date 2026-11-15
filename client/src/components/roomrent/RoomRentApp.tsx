@@ -124,6 +124,7 @@ export function RoomRentApp() {
   const [editingRoom, setEditingRoom] = useState<RentalRoom | null>(null);
   const [invoiceDialog, setInvoiceDialog] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<RentalInvoice | null>(null);
+  const [invoiceRoomId, setInvoiceRoomId] = useState<number | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<RentalExpense | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<RentalInvoice | null>(null);
@@ -218,6 +219,12 @@ export function RoomRentApp() {
   const utilityRates = data.utilityRates ?? DEFAULT_UTILITY_RATES;
   const activeRooms = rooms.filter(room => room.status !== "archived");
   const occupiedRooms = rooms.filter(room => room.status === "occupied");
+
+  function openInvoiceDialog(roomId?: number) {
+    setEditingInvoice(null);
+    setInvoiceRoomId(roomId ?? null);
+    setInvoiceDialog(true);
+  }
   const monthInvoices = invoices.filter(invoice => invoice.period === period);
   const totalBilled = roundMoney(monthInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0));
   const totalPaid = roundMoney(monthInvoices.reduce((sum, invoice) => sum + getInvoicePaidAmount(invoice), 0));
@@ -601,7 +608,7 @@ export function RoomRentApp() {
             <>
               <section className="section-intro"><div><h2>ดูแลข้อมูลผู้เช่าและอัตราค่าใช้จ่าย</h2><p>{isSupabaseRoomsConfigured ? "ข้อมูลที่บันทึกจะเห็นและแก้ไขได้โดยผู้เข้าถึง shared dataset ทุกคน" : "ข้อมูลนี้ใช้เป็นค่าเริ่มต้นเมื่อคำนวณบิลประจำเดือน"}</p></div><button className="button button-primary" disabled={isSupabaseRoomsConfigured && (!cloudReady || supabaseLoading)} onClick={() => { setEditingRoom(null); setRoomDialog(true); }}><Plus size={17} />เพิ่มห้องพัก</button></section>
               <div className="filter-bar"><label className="search-field"><Search size={17} /><input value={roomSearch} onChange={event => setRoomSearch(event.target.value)} placeholder="ค้นหาเลขห้อง ชื่อ หรือเบอร์โทร" /></label><span className="filter-count">{filteredRooms.length} จาก {activeRooms.length} ห้อง</span></div>
-              <section className="rooms-grid">{filteredRooms.map(room => <RoomCard key={room.id} room={room} hasBill={invoices.some(invoice => invoice.roomId === room.id && invoice.period === period)} onEdit={() => { setEditingRoom(room); setRoomDialog(true); }} onToggle={() => setRoomOccupancy(room)} onCreateInvoice={() => setInvoiceDialog(true)} />)}{!filteredRooms.length && <div className="full-span"><EmptyState icon={<Home size={21} />} title={activeRooms.length ? "ไม่พบห้องที่ค้นหา" : "เริ่มต้นด้วยการเพิ่มห้องพัก"} description={activeRooms.length ? "ลองเปลี่ยนคำค้นหาอีกครั้ง" : "เพิ่มรายละเอียดห้องและผู้เช่า เพื่อเริ่มออกบิลและติดตามค่าเช่ารายเดือนได้เลย"} action={!activeRooms.length ? <button className="button button-primary button-sm" onClick={() => setRoomDialog(true)}><Plus size={15} />เพิ่มห้องแรก</button> : undefined} /></div>}</section>
+              <section className="rooms-grid">{filteredRooms.map(room => <RoomCard key={room.id} room={room} hasBill={invoices.some(invoice => invoice.roomId === room.id && invoice.period === period)} onEdit={() => { setEditingRoom(room); setRoomDialog(true); }} onToggle={() => setRoomOccupancy(room)} onCreateInvoice={() => openInvoiceDialog(room.id)} />)}{!filteredRooms.length && <div className="full-span"><EmptyState icon={<Home size={21} />} title={activeRooms.length ? "ไม่พบห้องที่ค้นหา" : "เริ่มต้นด้วยการเพิ่มห้องพัก"} description={activeRooms.length ? "ลองเปลี่ยนคำค้นหาอีกครั้ง" : "เพิ่มรายละเอียดห้องและผู้เช่า เพื่อเริ่มออกบิลและติดตามค่าเช่ารายเดือนได้เลย"} action={!activeRooms.length ? <button className="button button-primary button-sm" onClick={() => setRoomDialog(true)}><Plus size={15} />เพิ่มห้องแรก</button> : undefined} /></div>}</section>
             </>
           ) : view === "finance" ? (
             <FinanceDashboard
@@ -631,7 +638,7 @@ export function RoomRentApp() {
       <nav className="mobile-nav" aria-label="เมนูหลัก"><button className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")}><LayoutDashboard size={19} /><span>ภาพรวม</span></button><button className={view === "rooms" ? "is-active" : ""} onClick={() => setView("rooms")}><Home size={19} /><span>ห้องพัก</span></button><button className={view === "bills" ? "is-active" : ""} onClick={() => setView("bills")}><FileText size={19} /><span>บิล</span></button><button className={view === "finance" ? "is-active" : ""} onClick={() => setView("finance")}><BarChart3 size={19} /><span>การเงิน</span></button><button className={view === "rates" ? "is-active" : ""} onClick={() => setView("rates")}><SlidersHorizontal size={19} /><span>Master</span></button><button className="mobile-add" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><Plus size={21} /><span>ออกบิล</span></button></nav>
 
       {roomDialog && <RoomDialog room={editingRoom} defaultRates={utilityRates} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
-      {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} utilityRates={utilityRates} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
+      {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} utilityRates={utilityRates} period={editingInvoice?.period ?? period} initialRoomId={invoiceRoomId ?? undefined} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); setInvoiceRoomId(null); }} onSave={saveBill} />}
       {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onDelete={deleteInvoice} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
       {expenseDialogOpen && <ExpenseDialog isSharedDataset={isSupabaseRoomsConfigured} expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}
       {dataToolsOpen && (
@@ -691,13 +698,13 @@ function findInvoiceForRoomPeriod(invoices: RentalInvoice[], roomId: number, per
   return invoices.find(invoice => invoice.id !== excludedId && invoice.roomId === roomId && invoice.period === period);
 }
 
-function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod, editingInvoice, onClose, onSave }: {
-  rooms: RentalRoom[]; invoices: RentalInvoice[]; utilityRates: UtilityRates; period: string; editingInvoice?: RentalInvoice; onClose: () => void;
+function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod, initialRoomId, editingInvoice, onClose, onSave }: {
+  rooms: RentalRoom[]; invoices: RentalInvoice[]; utilityRates: UtilityRates; period: string; initialRoomId?: number; editingInvoice?: RentalInvoice; onClose: () => void;
   onSave: (values: InvoiceDraft) => void;
 }) {
-  const initialRoomId = editingInvoice ? String(editingInvoice.roomId) : String(rooms[0]?.id ?? "");
-  const initialRoom = rooms.find(item => String(item.id) === initialRoomId);
-  const [roomId, setRoomId] = useState(initialRoomId);
+  const defaultRoomId = editingInvoice ? String(editingInvoice.roomId) : String(initialRoomId ?? rooms[0]?.id ?? "");
+  const initialRoom = rooms.find(item => String(item.id) === defaultRoomId);
+  const [roomId, setRoomId] = useState(defaultRoomId);
   const [period, setPeriod] = useState(editingInvoice?.period ?? initialPeriod);
   const [dueDate, setDueDate] = useState(editingInvoice?.dueDate ?? dayDueDate(initialPeriod));
   const [rentAmount, setRentAmount] = useState(String(editingInvoice?.rentAmount ?? initialRoom?.rentAmount ?? 0));
