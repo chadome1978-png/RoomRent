@@ -625,7 +625,7 @@ export function RoomRentApp() {
       <nav className="mobile-nav" aria-label="เมนูหลัก"><button className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")}><LayoutDashboard size={19} /><span>ภาพรวม</span></button><button className={view === "rooms" ? "is-active" : ""} onClick={() => setView("rooms")}><Home size={19} /><span>ห้องพัก</span></button><button className={view === "bills" ? "is-active" : ""} onClick={() => setView("bills")}><FileText size={19} /><span>บิล</span></button><button className={view === "finance" ? "is-active" : ""} onClick={() => setView("finance")}><BarChart3 size={19} /><span>การเงิน</span></button><button className={view === "rates" ? "is-active" : ""} onClick={() => setView("rates")}><SlidersHorizontal size={19} /><span>Master</span></button><button className="mobile-add" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><Plus size={21} /><span>ออกบิล</span></button></nav>
 
       {roomDialog && <RoomDialog room={editingRoom} defaultRates={utilityRates} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
-      {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
+      {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} utilityRates={utilityRates} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
       {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onDelete={deleteInvoice} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
       {expenseDialogOpen && <ExpenseDialog isSharedDataset={isSupabaseRoomsConfigured} expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}
       {dataToolsOpen && (
@@ -681,8 +681,8 @@ function latestMeterInvoice(invoices: RentalInvoice[], roomId: number, period: s
     .sort((a, b) => b.period.localeCompare(a.period) || b.issuedAt.localeCompare(a.issuedAt))[0];
 }
 
-function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoice, onClose, onSave }: {
-  rooms: RentalRoom[]; invoices: RentalInvoice[]; period: string; editingInvoice?: RentalInvoice; onClose: () => void;
+function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod, editingInvoice, onClose, onSave }: {
+  rooms: RentalRoom[]; invoices: RentalInvoice[]; utilityRates: UtilityRates; period: string; editingInvoice?: RentalInvoice; onClose: () => void;
   onSave: (values: InvoiceDraft) => void;
 }) {
   const initialRoomId = editingInvoice ? String(editingInvoice.roomId) : String(rooms[0]?.id ?? "");
@@ -691,8 +691,8 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
   const [period, setPeriod] = useState(editingInvoice?.period ?? initialPeriod);
   const [dueDate, setDueDate] = useState(editingInvoice?.dueDate ?? dayDueDate(initialPeriod));
   const [rentAmount, setRentAmount] = useState(String(editingInvoice?.rentAmount ?? initialRoom?.rentAmount ?? 0));
-  const [waterRate, setWaterRate] = useState(String(editingInvoice?.waterRate ?? initialRoom?.waterRate ?? 0));
-  const [electricRate, setElectricRate] = useState(String(editingInvoice?.electricRate ?? initialRoom?.electricRate ?? 0));
+  const [waterRate, setWaterRate] = useState(String(editingInvoice?.waterRate ?? utilityRates.waterPerUnit));
+  const [electricRate, setElectricRate] = useState(String(editingInvoice?.electricRate ?? utilityRates.electricPerUnit));
   const selectedRoom = rooms.find(item => String(item.id) === roomId);
   const room = selectedRoom
     ? {
@@ -739,8 +739,8 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
     setElectricCurrent("");
     const nextRoom = rooms.find(item => String(item.id) === next);
     setRentAmount(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.rentAmount : nextRoom?.rentAmount ?? 0));
-    setWaterRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.waterRate : nextRoom?.waterRate ?? 0));
-    setElectricRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.electricRate : nextRoom?.electricRate ?? 0));
+    setWaterRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.waterRate : utilityRates.waterPerUnit));
+    setElectricRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.electricRate : utilityRates.electricPerUnit));
     const last = latestMeterInvoice(invoices, Number(next), period, editingInvoice?.id);
     setWaterPrevious(last ? String(last.waterCurrent) : "0");
     setElectricPrevious(last ? String(last.electricCurrent) : "0");
