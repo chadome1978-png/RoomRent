@@ -941,3 +941,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .payment-record-dialog { width: 100%; }
   .payment-record-body { padding: 16px; }
 }
+
+
+/* Keep the invoice editor blocks intact; let the composer body scroll instead of shrinking them. */
+.bill-composer { overflow: hidden; }
+.composer-body { min-height: 0; flex: 1 1 auto; }
+.meter-block, .extra-block { flex: 0 0 auto; }
+.extra-line { min-height: 50px; }
+@media screen and (max-width: 700px) {
+  .composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .meter-block, .extra-block { flex-shrink: 0; }
+}
