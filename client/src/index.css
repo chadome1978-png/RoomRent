@@ -952,3 +952,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .meter-block, .extra-block { flex-shrink: 0; }
 }
+
+
+.bill-status.bill-partial { color: #d6a85e; }
+.bill-status.bill-partial i { background: #d6a85e; }
+.payment-stamp.is-partial { border-color: #d6a85e; color: #b18136; }

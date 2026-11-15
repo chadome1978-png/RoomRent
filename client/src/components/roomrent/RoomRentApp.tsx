@@ -93,8 +93,10 @@ function getLocalDataSummary() {
   };
 }
 
-function BillStatus({ status }: { status: "paid" | "unpaid" }) {
-  return <span className={`bill-status ${status === "paid" ? "bill-paid" : "bill-unpaid"}`}><i />{status === "paid" ? "ชำระแล้ว" : "รอชำระ"}</span>;
+function BillStatus({ status }: { status: RentalInvoice["status"] }) {
+  const isPaid = status === "paid";
+  const isPartial = status === "partial";
+  return <span className={`bill-status ${isPaid ? "bill-paid" : isPartial ? "bill-partial" : "bill-unpaid"}`}><i />{isPaid ? "ชำระแล้ว" : isPartial ? "ชำระไม่ครบ" : "รอชำระ"}</span>;
 }
 
 export function RoomRentApp() {
@@ -301,7 +303,7 @@ export function RoomRentApp() {
     }
     const duplicateInvoice = findInvoiceForRoomPeriod(currentData.invoices, storedRoom.id, values.period, existingInvoice?.id);
     if (duplicateInvoice) {
-      toast.error(`ห้อง ${storedRoom.roomNumber} ออกบิลรอบ ${formatPeriod(values.period)} แล้ว (${duplicateInvoice.status === "paid" ? "ชำระแล้ว" : "รอชำระ"})`);
+      toast.error(`ห้อง ${storedRoom.roomNumber} ออกบิลรอบ ${formatPeriod(values.period)} แล้ว (${duplicateInvoice.status === "paid" ? "ชำระแล้ว" : duplicateInvoice.status === "partial" ? "ชำระไม่ครบ" : "รอชำระ"})`);
       return;
     }
     if (![values.rentAmount, values.waterRate, values.electricRate].every(value => Number.isFinite(value) && value >= 0)) {
@@ -374,14 +376,14 @@ export function RoomRentApp() {
   async function togglePayment(invoice: RentalInvoice, requestedPaidAmount: number) {
     const paidAmount = roundMoney(Math.min(Math.max(requestedPaidAmount, 0), invoice.totalAmount));
     const balanceAmount = roundMoney(invoice.totalAmount - paidAmount);
-    const status = balanceAmount === 0 ? "paid" : "unpaid";
+    const status: RentalInvoice["status"] = balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
     const saved = await updateData(current => ({
       ...current,
       invoices: current.invoices.map(item => item.id === invoice.id ? { ...item, status, paidAmount, balanceAmount } : item),
     }));
     if (!saved) return;
     setSelectedInvoice(current => current ? { ...current, status, paidAmount, balanceAmount } : null);
-    toast.success(status === "paid" ? "บันทึกชำระครบเต็มจำนวนแล้ว" : `บันทึกยอดรับแล้ว คงค้าง ${formatMoney(balanceAmount)}`);
+    toast.success(status === "paid" ? "บันทึกชำระครบเต็มจำนวนแล้ว" : status === "partial" ? `เปลี่ยนสถานะเป็นชำระไม่ครบ คงค้าง ${formatMoney(balanceAmount)}` : "เปลี่ยนสถานะเป็นรอชำระแล้ว");
   }
   async function deleteInvoice(invoice: RentalInvoice) {
     const currentInvoice = dataRef.current.invoices.find(item => item.id === invoice.id);
@@ -578,7 +580,7 @@ export function RoomRentApp() {
               <section className="stats-strip" aria-label="สรุปยอดประจำเดือน">
                 <article className="stat-card stat-featured"><div className="stat-topline"><span>ยอดเรียกเก็บรอบนี้</span><div className="stat-icon stat-icon-teal"><Wallet size={18} /></div></div><strong className="stat-value">{formatMoney(summary.billed)}</strong><div className="stat-foot"><span className="stat-dot teal-dot" />{summary.invoiceCount} บิลที่ออกแล้ว</div></article>
                 <article className="stat-card"><div className="stat-topline"><span>รับชำระแล้ว</span><div className="stat-icon stat-icon-green"><ArrowDownRight size={18} /></div></div><strong className="stat-value">{formatMoney(summary.paid)}</strong><div className="stat-foot"><span className="stat-dot green-dot" />{summary.billed ? `${Math.round((summary.paid / summary.billed) * 100)}% ของยอดเรียกเก็บ` : "ยังไม่มีการชำระ"}</div></article>
-                <article className="stat-card"><div className="stat-topline"><span>ยอดค้างชำระ</span><div className="stat-icon stat-icon-amber"><ArrowUpRight size={18} /></div></div><strong className="stat-value">{formatMoney(summary.unpaid)}</strong><div className="stat-foot"><span className="stat-dot amber-dot" />{activePeriodInvoices.filter(invoice => invoice.status === "unpaid").length} บิลรอชำระ</div></article>
+                <article className="stat-card"><div className="stat-topline"><span>ยอดค้างชำระ</span><div className="stat-icon stat-icon-amber"><ArrowUpRight size={18} /></div></div><strong className="stat-value">{formatMoney(summary.unpaid)}</strong><div className="stat-foot"><span className="stat-dot amber-dot" />{activePeriodInvoices.filter(invoice => getInvoiceBalanceAmount(invoice) > 0).length} บิลค้างชำระ</div></article>
                 <article className="stat-card"><div className="stat-topline"><span>ห้องมีผู้เช่า</span><div className="stat-icon stat-icon-blue"><UsersRound size={18} /></div></div><strong className="stat-value">{summary.occupiedCount}<small> / {summary.roomCount} ห้อง</small></strong><div className="occupancy-track"><span style={{ width: `${occupiedPercent}%` }} /></div><div className="stat-foot">อัตราการเข้าพัก {occupiedPercent}%</div></article>
               </section>
               <section className="overview-columns">
@@ -783,7 +785,7 @@ function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod,
           <div className="form-grid two-col"><label className="field"><span>ห้องพัก <i>*</i></span><div className="select-wrap"><select value={roomId} onChange={event => onRoomChange(event.target.value)} required><option value="" disabled>เลือกห้อง</option>{rooms.map(item => <option key={item.id} value={String(item.id)}>{item.roomNumber} · {item.tenantName}</option>)}</select><ChevronDown size={15} /></div></label><label className="field"><span>รอบบิล <i>*</i></span><input type="month" value={period} onChange={event => onPeriodChange(event.target.value)} required /></label></div>
           {room && <div className="selected-room-note"><div className="tenant-avatar">{initials(room.tenantName)}</div><span><strong>{room.tenantName}</strong><small>ค่าเช่าฐาน {formatMoney(room.rentAmount)}</small></span><b className="room-chip">{room.roomNumber}</b></div>}
           {editingInvoice && <><div className="form-grid three-col"><label className="field"><span>ค่าเช่าห้อง (บาท)</span><input type="number" min="0" step="0.01" value={rentAmount} onChange={event => setRentAmount(event.target.value)} required /></label><label className="field"><span>ค่าน้ำ / หน่วย</span><input type="number" min="0" step="0.01" value={waterRate} onChange={event => setWaterRate(event.target.value)} required /></label><label className="field"><span>ค่าไฟ / หน่วย</span><input type="number" min="0" step="0.01" value={electricRate} onChange={event => setElectricRate(event.target.value)} required /></label></div><p className="history-footnote">ค่าเช่าและอัตราที่ปรับมีผลกับบิลนี้เท่านั้น ไม่เปลี่ยนข้อมูลตั้งต้นของห้อง</p></>}
-          {duplicateInvoice && <div className="inline-warning"><Bell size={15} />ห้องนี้ออกบิลรอบ {formatPeriod(period)} แล้ว ({duplicateInvoice.status === "paid" ? "ชำระแล้ว" : "รอชำระ"}) กรุณาเลือกเดือนอื่น</div>}
+          {duplicateInvoice && <div className="inline-warning"><Bell size={15} />ห้องนี้ออกบิลรอบ {formatPeriod(period)} แล้ว ({duplicateInvoice.status === "paid" ? "ชำระแล้ว" : duplicateInvoice.status === "partial" ? "ชำระไม่ครบ" : "รอชำระ"}) กรุณาเลือกเดือนอื่น</div>}
           <div className="meter-block"><div className="section-label"><div><strong>บันทึกมิเตอร์</strong><span>{editingInvoice ? "ค่ามิเตอร์ที่บันทึกไว้ในบิลนี้" : previous ? `ครั้งก่อนจากบิลรอบ ${formatPeriod(previous.period)}` : "ยังไม่มีบิลก่อนหน้า · เริ่มจาก 0"}</span></div><span className="meter-unit-label">หน่วย</span></div><MeterRow icon={<Droplets size={16} />} label="น้ำประปา" previous={waterPrevious} setPrevious={setWaterPrevious} current={waterCurrent} setCurrent={setWaterCurrent} rate={Number(room?.waterRate ?? 0)} total={waterTotal} units={waterUnits} /><MeterRow icon={<Zap size={16} />} label="ไฟฟ้า" previous={electricPrevious} setPrevious={setElectricPrevious} current={electricCurrent} setCurrent={setElectricCurrent} rate={Number(room?.electricRate ?? 0)} total={electricTotal} units={electricUnits} /></div>
           <div className="extra-block"><div className="section-label"><div><strong>ค่าใช้จ่ายเพิ่มเติม</strong><span>ค่าขยะ ค่าจอดรถ หรือส่วนลด</span></div><button type="button" className="add-link" onClick={() => setExtras(current => [...current, { label: "", amount: "" }])}><Plus size={14} />เพิ่มรายการ</button></div>{!extras.length ? <p className="no-extra">ไม่มีรายการเพิ่มเติมในบิลนี้</p> : extras.map((item, index) => <div className="extra-line" key={index}><input aria-label="ชื่อรายการเพิ่มเติม" maxLength={80} placeholder="ชื่อรายการ" value={item.label} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, label: event.target.value } : line))} /><div className="input-suffix"><input aria-label="จำนวนเงิน" type="number" step="0.01" placeholder="0" value={item.amount} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, amount: event.target.value } : line))} /><b>บาท</b></div><button type="button" className="remove-extra" aria-label="ลบรายการ" onClick={() => setExtras(current => current.filter((_, i) => i !== index))}>×</button></div>)}</div>
           <div className="form-grid two-col composer-lower"><label className="field"><span>วันครบกำหนด <i>*</i></span><input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} required /></label><label className="field"><span>หมายเหตุ</span><input maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" /></label></div>

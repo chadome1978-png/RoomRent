@@ -36,7 +36,7 @@ describe("RoomRent monthly finance calculations", () => {
 
   it("counts partial payment as income and carries only the remaining balance as pending", () => {
     const summary = getMonthlyFinanceSummary("2026-04", [
-      { period: "2026-04", status: "unpaid" as const, totalAmount: 1000, paidAmount: 300, balanceAmount: 700 },
+      { period: "2026-04", status: "partial" as const, totalAmount: 1000, paidAmount: 300, balanceAmount: 700 },
     ], []);
     expect(summary).toMatchObject({ income: 300, pending: 700, paidInvoiceCount: 1, pendingInvoiceCount: 1, net: 300 });
   });

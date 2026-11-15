@@ -79,7 +79,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
             <div className="invoice-paper-heading">
               <div className="invoice-brand-symbol">R</div>
               <div><strong>ROOMRENT</strong><span>ใบแจ้งค่าเช่าห้องพักรายเดือน</span></div>
-            <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : recordedPaidAmount > 0 ? "ชำระบางส่วน" : "รอชำระ"}</div>
+            <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : invoice.status === "partial" ? "is-partial" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : invoice.status === "partial" ? "ชำระไม่ครบ" : "รอชำระ"}</div>
             </div>
             <div className="invoice-paper-meta">
               <div><span>ผู้เช่า</span><strong>{invoice.tenantName}</strong><small>ห้อง {invoice.roomNumber}{invoice.phone ? ` · ${invoice.phone}` : ""}</small></div>
@@ -96,7 +96,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
             <div className="invoice-total"><span>ยอดรวมสุทธิ</span><strong>{formatMoney(invoice.totalAmount)}</strong></div>
             {recordedPaidAmount > 0 && <div className="invoice-payment-paid">รับชำระแล้ว {formatMoney(recordedPaidAmount)} · คงค้าง {formatMoney(outstandingAmount)}</div>}
             {invoice.note && <div className="invoice-note"><span>หมายเหตุ</span><p>{invoice.note}</p></div>}
-            {invoice.status === "unpaid" ? (
+            {invoice.status !== "paid" ? (
               <section className="invoice-payment" aria-label="QR PromptPay สำหรับชำระบิล">
                 <div className="invoice-payment-heading">
                   <div><span>ชำระผ่าน PromptPay</span><strong>{promptPaySettings?.recipientName ?? "ยังไม่ได้ตั้งค่าผู้รับเงิน"}</strong></div>

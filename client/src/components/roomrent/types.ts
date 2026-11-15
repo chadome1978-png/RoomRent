@@ -39,7 +39,8 @@ export type RentalInvoice = {
   /** Remaining balance after the latest payment. */
   balanceAmount?: number;
   note: string;
-  status: "paid" | "unpaid";
+  /** unpaid = not yet paid, partial = payment received but balance remains. */
+  status: "paid" | "unpaid" | "partial";
   issuedAt: string;
 };
 
@@ -134,7 +135,7 @@ function isInvoice(value: unknown): value is RentalInvoice {
     && value.extras.every(item => isRecord(item) && typeof item.label === "string" && typeof item.amount === "number")
     && typeof value.totalAmount === "number"
     && typeof value.note === "string"
-    && (value.status === "paid" || value.status === "unpaid")
+    && (value.status === "paid" || value.status === "unpaid" || value.status === "partial")
     && typeof value.issuedAt === "string";
 }
 
