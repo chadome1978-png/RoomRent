@@ -915,3 +915,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .utility-rates-footer > span { line-height: 1.5; }
   .utility-rates-guide { padding: 13px; }
 }
+
+
+.payment-scrim {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 80;
+  display: grid !important;
+  place-items: center;
+  padding: 18px;
+  background: #050a08bd !important;
+}
+.payment-record-dialog { width: min(430px, calc(100vw - 28px)); }
+.payment-record-body { display: grid; gap: 13px; padding: 18px 20px 4px; }
+.payment-summary-row, .payment-balance-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 13px; border: 1px solid #314339; border-radius: 10px; background: #1c2b23; color: #b9c9be; font-size: 11px; }
+.payment-summary-row strong { color: #e6f0e8; font-size: 16px; }
+.payment-record-body .text-button { justify-self: start; }
+.payment-balance-preview strong { font-size: 16px; }
+.payment-balance-preview.has-balance { border-color: #765b35; background: #30271d; color: #e6c076; }
+.payment-balance-preview.has-balance strong { color: #f0c97d; }
+.payment-balance-preview.is-settled { border-color: #35634f; color: #91d1b0; }
+.payment-balance-preview.is-settled strong { color: #8fe0bb; }
+@media screen and (max-width: 560px) {
+  .payment-scrim { padding: 10px; }
+  .payment-record-dialog { width: 100%; }
+  .payment-record-body { padding: 16px; }
+}

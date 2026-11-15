@@ -34,6 +34,10 @@ export type RentalInvoice = {
   electricAmount: number;
   extras: InvoiceExtra[];
   totalAmount: number;
+  /** Amount actually received; omitted on legacy invoices until payment is recorded. */
+  paidAmount?: number;
+  /** Remaining balance after the latest payment. */
+  balanceAmount?: number;
   note: string;
   status: "paid" | "unpaid";
   issuedAt: string;

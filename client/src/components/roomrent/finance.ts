@@ -11,7 +11,7 @@ export const EXPENSE_CATEGORIES: Array<{ id: ExpenseCategory; label: string; col
   { id: "other", label: "อื่น ๆ", color: "#98a79e" },
 ];
 
-export type InvoiceFinanceRecord = Pick<RentalInvoice, "period" | "status" | "totalAmount">;
+export type InvoiceFinanceRecord = Pick<RentalInvoice, "period" | "status" | "totalAmount" | "paidAmount" | "balanceAmount">;
 export type ExpenseFinanceRecord = Pick<RentalExpense, "date" | "amount" | "category">;
 
 export type MonthlyFinanceSummary = {
@@ -32,20 +32,28 @@ function sumAmounts(records: Array<{ amount: number }>) {
   return roundMoney(records.reduce((sum, record) => sum + record.amount, 0));
 }
 
+export function getInvoicePaidAmount(invoice: Pick<RentalInvoice, "status" | "totalAmount" | "paidAmount">) {
+  return Math.max(0, Math.min(invoice.totalAmount, invoice.paidAmount ?? (invoice.status === "paid" ? invoice.totalAmount : 0)));
+}
+
+export function getInvoiceBalanceAmount(invoice: Pick<RentalInvoice, "status" | "totalAmount" | "paidAmount" | "balanceAmount">) {
+  return Math.max(0, invoice.balanceAmount ?? invoice.totalAmount - getInvoicePaidAmount(invoice));
+}
+
 export function getMonthlyFinanceSummary(
   period: string,
   invoices: readonly InvoiceFinanceRecord[],
   expenses: readonly ExpenseFinanceRecord[],
 ): MonthlyFinanceSummary {
   const monthInvoices = invoices.filter(invoice => invoice.period === period);
-  const paidInvoices = monthInvoices.filter(invoice => invoice.status === "paid");
-  const pendingInvoices = monthInvoices.filter(invoice => invoice.status === "unpaid");
+  const paidInvoices = monthInvoices.filter(invoice => getInvoicePaidAmount(invoice) > 0);
+  const pendingInvoices = monthInvoices.filter(invoice => getInvoiceBalanceAmount(invoice) > 0);
   const monthExpenses = expenses.filter(expense => expense.date.slice(0, 7) === period);
-  const income = sumAmounts(paidInvoices.map(invoice => ({ amount: invoice.totalAmount })));
+  const income = sumAmounts(paidInvoices.map(invoice => ({ amount: getInvoicePaidAmount(invoice) })));
   const expenseTotal = sumAmounts(monthExpenses.map(expense => ({ amount: expense.amount })));
   return {
     income,
-    pending: sumAmounts(pendingInvoices.map(invoice => ({ amount: invoice.totalAmount }))),
+    pending: sumAmounts(pendingInvoices.map(invoice => ({ amount: getInvoiceBalanceAmount(invoice) }))),
     expenses: expenseTotal,
     net: roundMoney(income - expenseTotal),
     paidInvoiceCount: paidInvoices.length,
@@ -93,9 +101,9 @@ export function getExpensesForMonth(period: string, expenses: readonly RentalExp
 }
 
 export function getPaidInvoicesForMonth(period: string, invoices: readonly RentalInvoice[]) {
-  return invoices.filter(invoice => invoice.period === period && invoice.status === "paid");
+  return invoices.filter(invoice => invoice.period === period && getInvoicePaidAmount(invoice) > 0);
 }
 
 export function getPendingInvoicesForMonth(period: string, invoices: readonly RentalInvoice[]) {
-  return invoices.filter(invoice => invoice.period === period && invoice.status === "unpaid");
+  return invoices.filter(invoice => invoice.period === period && getInvoiceBalanceAmount(invoice) > 0);
 }

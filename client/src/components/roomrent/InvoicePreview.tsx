@@ -6,7 +6,7 @@ import { formatMoney, formatPeriod, formatThaiDate, type PromptPaySettings, type
 type Props = {
   invoice: RentalInvoice;
   onClose: () => void;
-  onSetPaid: (invoice: RentalInvoice) => void;
+  onSetPaid: (invoice: RentalInvoice, paidAmount: number) => void;
   onDelete: (invoice: RentalInvoice) => void;
   onEdit: (invoice: RentalInvoice) => void;
   onConfigurePromptPay: () => void;
@@ -34,7 +34,13 @@ function invoiceMessage(invoice: RentalInvoice) {
 
 export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, onConfigurePromptPay, promptPaySettings, busy }: Props) {
   const [copied, setCopied] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentInput, setPaymentInput] = useState(String(invoice.paidAmount ?? (invoice.status === "paid" ? invoice.totalAmount : invoice.totalAmount)));
   const totalExtras = (invoice.extras || []).reduce((sum, item) => sum + Number(item.amount), 0);
+  const recordedPaidAmount = Number(invoice.paidAmount ?? (invoice.status === "paid" ? invoice.totalAmount : 0));
+  const outstandingAmount = Math.max(0, Number(invoice.balanceAmount ?? invoice.totalAmount - recordedPaidAmount));
+  const enteredPayment = Number(paymentInput);
+  const paymentBalance = Math.max(0, invoice.totalAmount - (Number.isFinite(enteredPayment) ? enteredPayment : 0));
 
   async function copyText() {
     const text = invoiceMessage(invoice);
@@ -73,7 +79,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
             <div className="invoice-paper-heading">
               <div className="invoice-brand-symbol">R</div>
               <div><strong>ROOMRENT</strong><span>ใบแจ้งค่าเช่าห้องพักรายเดือน</span></div>
-              <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : "รอชำระ"}</div>
+            <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : recordedPaidAmount > 0 ? "ชำระบางส่วน" : "รอชำระ"}</div>
             </div>
             <div className="invoice-paper-meta">
               <div><span>ผู้เช่า</span><strong>{invoice.tenantName}</strong><small>ห้อง {invoice.roomNumber}{invoice.phone ? ` · ${invoice.phone}` : ""}</small></div>
@@ -88,6 +94,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
               {totalExtras === 0 && <div className="invoice-line invoice-line-muted"><span>ยอดค่าใช้จ่ายเพิ่มเติม</span><span>—</span><strong>{formatMoney(0)}</strong></div>}
             </div>
             <div className="invoice-total"><span>ยอดรวมสุทธิ</span><strong>{formatMoney(invoice.totalAmount)}</strong></div>
+            {recordedPaidAmount > 0 && <div className="invoice-payment-paid">รับชำระแล้ว {formatMoney(recordedPaidAmount)} · คงค้าง {formatMoney(outstandingAmount)}</div>}
             {invoice.note && <div className="invoice-note"><span>หมายเหตุ</span><p>{invoice.note}</p></div>}
             {invoice.status === "unpaid" ? (
               <section className="invoice-payment" aria-label="QR PromptPay สำหรับชำระบิล">
@@ -96,11 +103,11 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
                   <button className="text-button no-print" onClick={onConfigurePromptPay}><Settings2 size={14} />{promptPaySettings ? "แก้ไขข้อมูลรับเงิน" : "ตั้งค่า PromptPay"}</button>
                 </div>
                 {promptPaySettings
-                  ? <PromptPayQr settings={promptPaySettings} amount={invoice.totalAmount} />
+                  ? <PromptPayQr settings={promptPaySettings} amount={outstandingAmount || invoice.totalAmount} />
                   : <div className="promptpay-not-configured"><QrCode size={24} /><span>ตั้งค่า PromptPay ID เพื่อสร้าง QR ที่ระบุยอดบิลนี้</span></div>}
               </section>
             ) : (
-              <div className="invoice-payment-paid">บิลนี้ชำระแล้ว · ซ่อน QR เพื่อป้องกันการชำระซ้ำ</div>
+              <div className="invoice-payment-paid">บิลนี้ชำระครบแล้ว · ซ่อน QR เพื่อป้องกันการชำระซ้ำ</div>
             )}
             <footer className="invoice-paper-footer"><span>ออกบิล {formatThaiDate(invoice.issuedAt)}</span><span>ขอบคุณที่ใช้บริการ</span></footer>
           </article>
@@ -111,9 +118,22 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
           <button className="button button-quiet" onClick={copyText}><Copy size={16} />{copied ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</button>
           <button className="button line-button" onClick={shareLine}><Share2 size={16} />ส่งทาง LINE</button>
           <button className="button button-outline print-button" onClick={() => window.print()}><Printer size={16} />พิมพ์ / บันทึก PDF</button>
-          <button className={`button ${invoice.status === "paid" ? "button-quiet" : "button-primary"}`} disabled={busy} onClick={() => onSetPaid(invoice)}><Check size={16} />{invoice.status === "paid" ? "ยกเลิกชำระ" : "บันทึกว่าชำระแล้ว"}</button>
+          <button className={`button ${invoice.status === "paid" ? "button-quiet" : "button-primary"}`} disabled={busy} onClick={() => invoice.status === "paid" ? onSetPaid(invoice, 0) : setPaymentDialogOpen(true)}><Check size={16} />{invoice.status === "paid" ? "ยกเลิกชำระ" : "บันทึกการชำระเงิน"}</button>
         </footer>
       </section>
+      {paymentDialogOpen && <div className="dialog-scrim payment-scrim" role="presentation" onMouseDown={event => event.target === event.currentTarget && setPaymentDialogOpen(false)}>
+        <section className="dialog-panel payment-record-dialog" role="dialog" aria-modal="true" aria-labelledby="payment-record-title">
+          <header className="dialog-header"><div><span className="eyebrow">บันทึกการรับเงิน</span><h2 id="payment-record-title">ยอดชำระบิล</h2></div><button className="icon-button" onClick={() => setPaymentDialogOpen(false)} aria-label="ปิด"><X size={19} /></button></header>
+          <div className="payment-record-body">
+            <div className="payment-summary-row"><span>ยอดเต็มตามบิล</span><strong>{formatMoney(invoice.totalAmount)}</strong></div>
+            <label className="field"><span>ยอดที่รับชำระจริง <i>*</i></span><div className="input-suffix"><input type="number" min="0" max={invoice.totalAmount} step="0.01" value={paymentInput} onChange={event => setPaymentInput(event.target.value)} autoFocus /><b>บาท</b></div></label>
+            <button type="button" className="text-button" onClick={() => setPaymentInput(String(invoice.totalAmount))}>รับเต็มจำนวน {formatMoney(invoice.totalAmount)}</button>
+            <div className={`payment-balance-preview ${paymentBalance > 0 ? "has-balance" : "is-settled"}`}><span>ยอดคงค้างหลังรับเงิน</span><strong>{formatMoney(paymentBalance)}</strong></div>
+            {paymentBalance > 0 && <p className="history-footnote">ยอดคงค้างจะถูกนำไปบวกในบิลเดือนถัดไปโดยอัตโนมัติ</p>}
+          </div>
+          <footer className="dialog-footer"><button type="button" className="button button-quiet" onClick={() => setPaymentDialogOpen(false)}>ยกเลิก</button><button type="button" className="button button-primary" disabled={!Number.isFinite(enteredPayment) || enteredPayment < 0 || enteredPayment > invoice.totalAmount || busy} onClick={() => { onSetPaid(invoice, enteredPayment); setPaymentDialogOpen(false); }}>บันทึกยอดชำระ <Check size={16} /></button></footer>
+        </section>
+      </div>}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import {
 import { toast } from "sonner";
 import { ExpenseDialog } from "./ExpenseDialog";
 import { FinanceDashboard } from "./FinanceDashboard";
+import { getInvoiceBalanceAmount, getInvoicePaidAmount } from "./finance";
 import { InvoicePreview } from "./InvoicePreview";
 import { PromptPaySettingsDialog } from "./PromptPaySettingsDialog";
 import { RoomDialog } from "./RoomDialog";
@@ -217,7 +218,7 @@ export function RoomRentApp() {
   const occupiedRooms = rooms.filter(room => room.status === "occupied");
   const monthInvoices = invoices.filter(invoice => invoice.period === period);
   const totalBilled = roundMoney(monthInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0));
-  const totalPaid = roundMoney(monthInvoices.filter(invoice => invoice.status === "paid").reduce((sum, invoice) => sum + invoice.totalAmount, 0));
+  const totalPaid = roundMoney(monthInvoices.reduce((sum, invoice) => sum + getInvoicePaidAmount(invoice), 0));
   const summary = {
     roomCount: activeRooms.length,
     occupiedCount: occupiedRooms.length,
@@ -225,7 +226,7 @@ export function RoomRentApp() {
     rentExpected: roundMoney(occupiedRooms.reduce((sum, room) => sum + room.rentAmount, 0)),
     billed: totalBilled,
     paid: totalPaid,
-    unpaid: roundMoney(totalBilled - totalPaid),
+    unpaid: roundMoney(monthInvoices.reduce((sum, invoice) => sum + getInvoiceBalanceAmount(invoice), 0)),
     invoiceCount: monthInvoices.length,
     invoices: monthInvoices,
   };
@@ -370,15 +371,17 @@ export function RoomRentApp() {
     toast.success(`${existingInvoice ? "แก้ไขบิลแล้ว" : "ออกบิลแล้ว"} ยอดรวม ${formatMoney(totalAmount)}`);
   }
 
-  async function togglePayment(invoice: RentalInvoice) {
-    const status = invoice.status === "paid" ? "unpaid" : "paid";
+  async function togglePayment(invoice: RentalInvoice, requestedPaidAmount: number) {
+    const paidAmount = roundMoney(Math.min(Math.max(requestedPaidAmount, 0), invoice.totalAmount));
+    const balanceAmount = roundMoney(invoice.totalAmount - paidAmount);
+    const status = balanceAmount === 0 ? "paid" : "unpaid";
     const saved = await updateData(current => ({
       ...current,
-      invoices: current.invoices.map(item => item.id === invoice.id ? { ...item, status } : item),
+      invoices: current.invoices.map(item => item.id === invoice.id ? { ...item, status, paidAmount, balanceAmount } : item),
     }));
     if (!saved) return;
-    setSelectedInvoice(current => current ? { ...current, status } : null);
-    toast.success(status === "paid" ? "บันทึกการชำระเงินแล้ว" : "เปลี่ยนสถานะเป็นรอชำระแล้ว");
+    setSelectedInvoice(current => current ? { ...current, status, paidAmount, balanceAmount } : null);
+    toast.success(status === "paid" ? "บันทึกชำระครบเต็มจำนวนแล้ว" : `บันทึกยอดรับแล้ว คงค้าง ${formatMoney(balanceAmount)}`);
   }
   async function deleteInvoice(invoice: RentalInvoice) {
     const currentInvoice = dataRef.current.invoices.find(item => item.id === invoice.id);
@@ -724,8 +727,11 @@ function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod,
   const electricUnits = Math.max(0, moneyInput(electricCurrent) - moneyInput(electricPrevious));
   const waterTotal = roundMoney(waterUnits * Number(room?.waterRate ?? 0));
   const electricTotal = roundMoney(electricUnits * Number(room?.electricRate ?? 0));
+  const previousBalance = previous && !editingInvoice
+    ? roundMoney(Math.max(0, previous.balanceAmount ?? (previous.status === "paid" ? 0 : previous.totalAmount - (previous.paidAmount ?? 0))))
+    : 0;
   const extraTotal = extras.reduce((sum, item) => sum + moneyInput(item.amount), 0);
-  const rawTotal = Number(room?.rentAmount ?? 0) + waterTotal + electricTotal + extraTotal;
+  const rawTotal = Number(room?.rentAmount ?? 0) + waterTotal + electricTotal + extraTotal + previousBalance;
   const invoiceTotal = Math.max(0, roundMoney(rawTotal));
   const duplicateInvoice = room ? findInvoiceForRoomPeriod(invoices, room.id, period, editingInvoice?.id) : undefined;
   const duplicate = Boolean(duplicateInvoice);
@@ -764,7 +770,9 @@ function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod,
     const [year, month, day] = dueDate.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     if (Number.isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) { setError("กรุณาตรวจสอบวันครบกำหนด"); return; }
-    onSave({ roomId: room.id, period, dueDate, rentAmount: moneyInput(rentAmount), waterRate: moneyInput(waterRate), electricRate: moneyInput(electricRate), waterPrevious: waterBefore, waterCurrent: waterNow, electricPrevious: electricBefore, electricCurrent: electricNow, extras: extras.filter(item => item.label.trim()).map(item => ({ label: item.label.trim(), amount: roundMoney(Number(item.amount)) })), note: note.trim() });
+    const enteredExtras = extras.filter(item => item.label.trim()).map(item => ({ label: item.label.trim(), amount: roundMoney(Number(item.amount)) }));
+    const arrearsExtra = previousBalance > 0 && previous ? [{ label: `ยอดค้างชำระรอบ ${formatPeriod(previous.period)}`, amount: previousBalance }] : [];
+    onSave({ roomId: room.id, period, dueDate, rentAmount: moneyInput(rentAmount), waterRate: moneyInput(waterRate), electricRate: moneyInput(electricRate), waterPrevious: waterBefore, waterCurrent: waterNow, electricPrevious: electricBefore, electricCurrent: electricNow, extras: [...arrearsExtra, ...enteredExtras], note: note.trim() });
   }
 
   return (
@@ -779,7 +787,7 @@ function InvoiceComposer({ rooms, invoices, utilityRates, period: initialPeriod,
           <div className="meter-block"><div className="section-label"><div><strong>บันทึกมิเตอร์</strong><span>{editingInvoice ? "ค่ามิเตอร์ที่บันทึกไว้ในบิลนี้" : previous ? `ครั้งก่อนจากบิลรอบ ${formatPeriod(previous.period)}` : "ยังไม่มีบิลก่อนหน้า · เริ่มจาก 0"}</span></div><span className="meter-unit-label">หน่วย</span></div><MeterRow icon={<Droplets size={16} />} label="น้ำประปา" previous={waterPrevious} setPrevious={setWaterPrevious} current={waterCurrent} setCurrent={setWaterCurrent} rate={Number(room?.waterRate ?? 0)} total={waterTotal} units={waterUnits} /><MeterRow icon={<Zap size={16} />} label="ไฟฟ้า" previous={electricPrevious} setPrevious={setElectricPrevious} current={electricCurrent} setCurrent={setElectricCurrent} rate={Number(room?.electricRate ?? 0)} total={electricTotal} units={electricUnits} /></div>
           <div className="extra-block"><div className="section-label"><div><strong>ค่าใช้จ่ายเพิ่มเติม</strong><span>ค่าขยะ ค่าจอดรถ หรือส่วนลด</span></div><button type="button" className="add-link" onClick={() => setExtras(current => [...current, { label: "", amount: "" }])}><Plus size={14} />เพิ่มรายการ</button></div>{!extras.length ? <p className="no-extra">ไม่มีรายการเพิ่มเติมในบิลนี้</p> : extras.map((item, index) => <div className="extra-line" key={index}><input aria-label="ชื่อรายการเพิ่มเติม" maxLength={80} placeholder="ชื่อรายการ" value={item.label} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, label: event.target.value } : line))} /><div className="input-suffix"><input aria-label="จำนวนเงิน" type="number" step="0.01" placeholder="0" value={item.amount} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, amount: event.target.value } : line))} /><b>บาท</b></div><button type="button" className="remove-extra" aria-label="ลบรายการ" onClick={() => setExtras(current => current.filter((_, i) => i !== index))}>×</button></div>)}</div>
           <div className="form-grid two-col composer-lower"><label className="field"><span>วันครบกำหนด <i>*</i></span><input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} required /></label><label className="field"><span>หมายเหตุ</span><input maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" /></label></div>
-          <div className="bill-calculation"><div><span>ค่าเช่า</span><strong>{formatMoney(room?.rentAmount ?? 0)}</strong></div><div><span>ค่าน้ำ · {waterUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(waterTotal)}</strong></div><div><span>ค่าไฟ · {electricUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(electricTotal)}</strong></div>{extras.length > 0 && <div><span>รายการเพิ่มเติม</span><strong>{formatMoney(extraTotal)}</strong></div>}<div className="calculation-total"><span>ยอดรวมบิล</span><strong>{formatMoney(invoiceTotal)}</strong></div></div>
+          <div className="bill-calculation"><div><span>ค่าเช่า</span><strong>{formatMoney(room?.rentAmount ?? 0)}</strong></div><div><span>ค่าน้ำ · {waterUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(waterTotal)}</strong></div><div><span>ค่าไฟ · {electricUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(electricTotal)}</strong></div>{previousBalance > 0 && <div><span>ยอดค้างชำระรอบก่อน</span><strong>{formatMoney(previousBalance)}</strong></div>}{extras.length > 0 && <div><span>รายการเพิ่มเติม</span><strong>{formatMoney(extraTotal)}</strong></div>}<div className="calculation-total"><span>ยอดรวมบิล</span><strong>{formatMoney(invoiceTotal)}</strong></div></div>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="dialog-footer composer-footer"><button type="button" className="button button-quiet" onClick={onClose}>ยกเลิก</button><button type="submit" className="button button-primary" disabled={!room || duplicate}>{editingInvoice ? "บันทึกการแก้ไข" : "ตรวจยอดและออกบิล"}<ArrowRight size={16} /></button></div>
         </form>
