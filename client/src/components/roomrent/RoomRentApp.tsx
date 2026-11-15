@@ -36,6 +36,7 @@ import { InvoicePreview } from "./InvoicePreview";
 import { PromptPaySettingsDialog } from "./PromptPaySettingsDialog";
 import { RoomDialog } from "./RoomDialog";
 import { RoomRentMark } from "./RoomRentMark";
+import { UtilityRatesPanel } from "./UtilityRatesPanel";
 import { mergeMigrationData } from "./accountMigration";
 import { fetchSupabaseSharedData, saveSupabaseSharedData } from "./supabaseSharedData";
 import { isSupabaseRoomsConfigured } from "./supabaseClient";
@@ -56,9 +57,11 @@ import {
   type RentalExpense,
   type RentalInvoice,
   type RentalRoom,
+  DEFAULT_UTILITY_RATES,
+  type UtilityRates,
 } from "./types";
 
-type View = "overview" | "rooms" | "bills" | "finance";
+type View = "overview" | "rooms" | "bills" | "finance" | "rates";
 type InvoiceDraft = {
   roomId: number; period: string; dueDate: string;
   rentAmount: number; waterRate: number; electricRate: number;
@@ -208,6 +211,7 @@ export function RoomRentApp() {
   const rooms = data.rooms;
   const invoices = data.invoices;
   const expenses = data.expenses;
+  const utilityRates = data.utilityRates ?? DEFAULT_UTILITY_RATES;
   const activeRooms = rooms.filter(room => room.status !== "archived");
   const occupiedRooms = rooms.filter(room => room.status === "occupied");
   const monthInvoices = invoices.filter(invoice => invoice.period === period);
@@ -381,6 +385,12 @@ export function RoomRentApp() {
     toast.success(isSupabaseRoomsConfigured ? "บันทึกการตั้งค่า PromptPay ใน Cloud แล้ว" : "บันทึกข้อมูล PromptPay ในอุปกรณ์นี้แล้ว");
   }
 
+  async function saveUtilityRates(nextRates: UtilityRates) {
+    if (await updateData(current => ({ ...current, utilityRates: nextRates }))) {
+      toast.success(isSupabaseRoomsConfigured ? "บันทึก Master ค่าน้ำค่าไฟใน Cloud แล้ว" : "บันทึก Master ค่าน้ำค่าไฟในอุปกรณ์นี้แล้ว");
+    }
+  }
+
   function openExpenseDialog(expense?: RentalExpense) {
     setEditingExpense(expense ?? null);
     setExpenseDialogOpen(true);
@@ -509,6 +519,7 @@ export function RoomRentApp() {
           <button className={`nav-item${view === "rooms" ? " is-active" : ""}`} onClick={() => setView("rooms")}><Icon><Home size={18} /></Icon><span>ห้องพัก</span><span className="nav-count">{activeRooms.length}</span></button>
           <button className={`nav-item${view === "bills" ? " is-active" : ""}`} onClick={() => setView("bills")}><Icon><FileText size={18} /></Icon><span>บิลค่าเช่า</span></button>
           <button className={`nav-item${view === "finance" ? " is-active" : ""}`} onClick={() => setView("finance")}><Icon><BarChart3 size={18} /></Icon><span>รายรับ-รายจ่าย</span></button>
+          <button className={`nav-item${view === "rates" ? " is-active" : ""}`} onClick={() => setView("rates")}><Icon><SlidersHorizontal size={18} /></Icon><span>มาสเตอร์ค่าน้ำ–ไฟ</span></button>
         </nav>
         <div className="sidebar-lower">
           <div className="sidebar-tip"><div className="tip-icon"><CircleHelp size={16} /></div><strong>{isSupabaseRoomsConfigured ? "ข้อมูลร่วมสาธารณะ" : "จัดเก็บในอุปกรณ์นี้"}</strong><span>{isSupabaseRoomsConfigured ? "ทุกคนที่เข้าถึงแอป/API อ่าน เพิ่ม แก้ไข ลบ หรือแทนที่ชุดข้อมูลได้" : "ข้อมูลอยู่ในอุปกรณ์นี้ · สำรองไฟล์ไว้เป็นประจำ"}</span><button className="local-backup-link" onClick={() => setDataToolsOpen(true)}><Download size={14} />สำรอง / กู้คืนข้อมูล</button><button className="local-backup-link" onClick={() => setPromptPaySettingsOpen(true)}><QrCode size={14} />ตั้งค่า QR PromptPay</button></div>
@@ -519,7 +530,7 @@ export function RoomRentApp() {
       <div className="mobile-topbar"><RoomRentMark /><div className="mobile-top-actions"><span className="local-device-badge"><Database size={14} />{isSupabaseRoomsConfigured ? "Supabase" : "ในเครื่อง"}</span><button className="icon-button" aria-label="ตั้งค่า QR PromptPay" title="ตั้งค่า QR PromptPay" onClick={() => setPromptPaySettingsOpen(true)}><QrCode size={17} /></button><button className="icon-button" aria-label="สำรองหรือกู้คืนข้อมูล" onClick={() => setDataToolsOpen(true)}><Download size={17} /></button></div></div>
       <main className="main-area">
         <header className="page-header">
-          <div className="page-title-wrap"><span className="eyebrow">ศูนย์จัดการห้องเช่า · {isSupabaseRoomsConfigured ? "shared dataset สาธารณะ" : "ข้อมูลในอุปกรณ์นี้"}</span><h1>{view === "overview" ? "ภาพรวม" : view === "rooms" ? "ห้องพักทั้งหมด" : view === "finance" ? "รายรับ-รายจ่าย" : "บิลค่าเช่า"}</h1></div>
+          <div className="page-title-wrap"><span className="eyebrow">ศูนย์จัดการห้องเช่า · {isSupabaseRoomsConfigured ? "shared dataset สาธารณะ" : "ข้อมูลในอุปกรณ์นี้"}</span><h1>{view === "overview" ? "ภาพรวม" : view === "rooms" ? "ห้องพักทั้งหมด" : view === "finance" ? "รายรับ-รายจ่าย" : view === "rates" ? "มาสเตอร์ค่าน้ำ–ค่าไฟ" : "บิลค่าเช่า"}</h1></div>
           <div className="page-actions">
             {view === "overview" && <div className="period-control"><button className="icon-button" onClick={() => setPeriod(current => shiftPeriod(current, -1))} aria-label="เดือนก่อนหน้า"><ChevronLeft size={17} /></button><span>{monthLabel(period)}</span><button className="icon-button" onClick={() => setPeriod(current => shiftPeriod(current, 1))} aria-label="เดือนถัดไป" disabled={isCurrentMonth}><ChevronRight size={17} /></button></div>}
             <button className="button button-primary header-cta" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length || (isSupabaseRoomsConfigured && (!cloudReady || supabaseLoading))}><FilePlus2 size={17} /><span>ออกบิลใหม่</span></button>
@@ -574,6 +585,8 @@ export function RoomRentApp() {
               onOpenInvoice={setSelectedInvoice}
               onViewUnpaid={() => { setInvoicePeriodFilter(financePeriod); setInvoiceRoomFilter("all"); setInvoiceSearch(""); setView("bills"); }}
             />
+          ) : view === "rates" ? (
+            <UtilityRatesPanel rates={utilityRates} onSave={saveUtilityRates} />
           ) : (
             <>
               <section className="section-intro"><div><h2>บิลที่ออกให้ผู้เช่า</h2><p>ค้นย้อนหลังตามห้องและรอบเดือน แล้วเปิดดูเพื่อพิมพ์หรือส่งต่อ</p></div><button className="button button-primary" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><FilePlus2 size={17} />ออกบิลใหม่</button></section>
@@ -585,9 +598,9 @@ export function RoomRentApp() {
         </div>
         <footer className="app-footer"><span>RoomRent <i>·</i> ดูแลค่าเช่าอย่างเป็นระบบ</span><span>{isSupabaseRoomsConfigured ? "shared dataset สาธารณะบน Supabase · ใช้งานข้อมูลเมื่อออนไลน์" : "ข้อมูลจัดเก็บในอุปกรณ์นี้ · สำรองไฟล์เป็นประจำ"}</span></footer>
       </main>
-      <nav className="mobile-nav" aria-label="เมนูหลัก"><button className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")}><LayoutDashboard size={19} /><span>ภาพรวม</span></button><button className={view === "rooms" ? "is-active" : ""} onClick={() => setView("rooms")}><Home size={19} /><span>ห้องพัก</span></button><button className={view === "bills" ? "is-active" : ""} onClick={() => setView("bills")}><FileText size={19} /><span>บิล</span></button><button className={view === "finance" ? "is-active" : ""} onClick={() => setView("finance")}><BarChart3 size={19} /><span>การเงิน</span></button><button className="mobile-add" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><Plus size={21} /><span>ออกบิล</span></button></nav>
+      <nav className="mobile-nav" aria-label="เมนูหลัก"><button className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")}><LayoutDashboard size={19} /><span>ภาพรวม</span></button><button className={view === "rooms" ? "is-active" : ""} onClick={() => setView("rooms")}><Home size={19} /><span>ห้องพัก</span></button><button className={view === "bills" ? "is-active" : ""} onClick={() => setView("bills")}><FileText size={19} /><span>บิล</span></button><button className={view === "finance" ? "is-active" : ""} onClick={() => setView("finance")}><BarChart3 size={19} /><span>การเงิน</span></button><button className={view === "rates" ? "is-active" : ""} onClick={() => setView("rates")}><SlidersHorizontal size={19} /><span>Master</span></button><button className="mobile-add" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><Plus size={21} /><span>ออกบิล</span></button></nav>
 
-      {roomDialog && <RoomDialog room={editingRoom} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
+      {roomDialog && <RoomDialog room={editingRoom} defaultRates={utilityRates} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
       {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
       {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
       {expenseDialogOpen && <ExpenseDialog isSharedDataset={isSupabaseRoomsConfigured} expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}

@@ -59,11 +59,22 @@ export type RentalExpense = {
 
 export type ExpenseDraft = Pick<RentalExpense, "date" | "category" | "description" | "amount" | "note">;
 
+export type UtilityRates = {
+  waterPerUnit: number;
+  electricPerUnit: number;
+};
+
+export const DEFAULT_UTILITY_RATES: UtilityRates = {
+  waterPerUnit: 0,
+  electricPerUnit: 0,
+};
+
 export type LocalDatabase = {
   version: 1;
   rooms: RentalRoom[];
   invoices: RentalInvoice[];
   expenses: RentalExpense[];
+  utilityRates?: UtilityRates;
   promptPay?: PromptPaySettings;
   /** Cloud migration marker for the former Supabase rental_rooms table. */
   legacyRoomsImported?: boolean;
@@ -152,6 +163,16 @@ function isExpense(value: unknown): value is RentalExpense {
     && typeof value.updatedAt === "string";
 }
 
+function isUtilityRates(value: unknown): value is UtilityRates {
+  if (!isRecord(value)) return false;
+  return typeof value.waterPerUnit === "number"
+    && Number.isFinite(value.waterPerUnit)
+    && value.waterPerUnit >= 0
+    && typeof value.electricPerUnit === "number"
+    && Number.isFinite(value.electricPerUnit)
+    && value.electricPerUnit >= 0;
+}
+
 export function parseLocalDatabase(value: unknown): LocalDatabase | null {
   if (!isRecord(value)) return null;
   const payload = isRecord(value.data) ? value.data : value;
@@ -159,12 +180,14 @@ export function parseLocalDatabase(value: unknown): LocalDatabase | null {
   if (!payload.rooms.every(isRoom) || !payload.invoices.every(isInvoice)) return null;
   const expenses = payload.expenses ?? [];
   if (!Array.isArray(expenses) || !expenses.every(isExpense)) return null;
+  if (payload.utilityRates !== undefined && !isUtilityRates(payload.utilityRates)) return null;
   if (payload.promptPay !== undefined && !isPromptPaySettings(payload.promptPay)) return null;
   return {
     version: 1,
     rooms: payload.rooms,
     invoices: payload.invoices,
     expenses,
+    ...(payload.utilityRates ? { utilityRates: payload.utilityRates } : {}),
     ...(payload.promptPay ? { promptPay: payload.promptPay } : {}),
     ...(payload.legacyRoomsImported === true ? { legacyRoomsImported: true } : {}),
   };

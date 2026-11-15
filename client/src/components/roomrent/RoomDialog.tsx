@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { RentalRoom } from "./types";
+import type { RentalRoom, UtilityRates } from "./types";
 
 type RoomFormValue = {
   roomNumber: string;
@@ -14,18 +14,19 @@ type RoomFormValue = {
 
 type Props = {
   room?: RentalRoom | null;
+  defaultRates: UtilityRates;
   busy?: boolean;
   onClose: () => void;
   onSave: (values: RoomFormValue) => void;
 };
 
-export function RoomDialog({ room, busy, onClose, onSave }: Props) {
+export function RoomDialog({ room, defaultRates, busy, onClose, onSave }: Props) {
   const [roomNumber, setRoomNumber] = useState(room?.roomNumber ?? "");
   const [tenantName, setTenantName] = useState(room?.tenantName ?? "");
   const [phone, setPhone] = useState(room?.phone ?? "");
   const [rentAmount, setRentAmount] = useState(room ? String(room.rentAmount) : "");
-  const [waterRate, setWaterRate] = useState(room ? String(room.waterRate) : "");
-  const [electricRate, setElectricRate] = useState(room ? String(room.electricRate) : "");
+  const [waterRate, setWaterRate] = useState(room ? String(room.waterRate) : String(defaultRates.waterPerUnit));
+  const [electricRate, setElectricRate] = useState(room ? String(room.electricRate) : String(defaultRates.electricPerUnit));
   const [status, setStatus] = useState<RoomFormValue["status"]>(room?.status ?? "occupied");
   const [error, setError] = useState("");
 
