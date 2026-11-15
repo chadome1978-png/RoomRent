@@ -14,6 +14,17 @@ export const EXPENSE_CATEGORIES: Array<{ id: ExpenseCategory; label: string; col
 export type InvoiceFinanceRecord = Pick<RentalInvoice, "period" | "status" | "totalAmount" | "paidAmount" | "balanceAmount">;
 export type ExpenseFinanceRecord = Pick<RentalExpense, "date" | "amount" | "category">;
 
+export type ArrearsByRoom = {
+  roomId: number;
+  roomNumber: string;
+  tenantName: string;
+  invoiceCount: number;
+  periods: string[];
+  billed: number;
+  paid: number;
+  balance: number;
+};
+
 export type MonthlyFinanceSummary = {
   income: number;
   pending: number;
@@ -38,6 +49,31 @@ export function getInvoicePaidAmount(invoice: Pick<RentalInvoice, "status" | "to
 
 export function getInvoiceBalanceAmount(invoice: Pick<RentalInvoice, "status" | "totalAmount" | "paidAmount" | "balanceAmount">) {
   return Math.max(0, invoice.balanceAmount ?? invoice.totalAmount - getInvoicePaidAmount(invoice));
+}
+
+export function getArrearsByRoom(invoices: readonly RentalInvoice[]): ArrearsByRoom[] {
+  const grouped = new Map<number, ArrearsByRoom>();
+  for (const invoice of invoices) {
+    const balance = getInvoiceBalanceAmount(invoice);
+    if (balance <= 0) continue;
+    const current = grouped.get(invoice.roomId) ?? {
+      roomId: invoice.roomId,
+      roomNumber: invoice.roomNumber,
+      tenantName: invoice.tenantName,
+      invoiceCount: 0,
+      periods: [],
+      billed: 0,
+      paid: 0,
+      balance: 0,
+    };
+    current.invoiceCount += 1;
+    current.periods.push(invoice.period);
+    current.billed = roundMoney(current.billed + invoice.totalAmount);
+    current.paid = roundMoney(current.paid + getInvoicePaidAmount(invoice));
+    current.balance = roundMoney(current.balance + balance);
+    grouped.set(invoice.roomId, current);
+  }
+  return [...grouped.values()].sort((a, b) => b.balance - a.balance || a.roomNumber.localeCompare(b.roomNumber));
 }
 
 export function getMonthlyFinanceSummary(

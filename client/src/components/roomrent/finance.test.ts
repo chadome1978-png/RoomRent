@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getExpenseCategoryTotals, getMonthlyFinanceSummary, getSixMonthCashFlow } from "./finance";
+import { getArrearsByRoom, getExpenseCategoryTotals, getMonthlyFinanceSummary, getSixMonthCashFlow } from "./finance";
 
 const invoices = [
   { period: "2026-04", status: "paid" as const, totalAmount: 12000 },
@@ -39,6 +39,17 @@ describe("RoomRent monthly finance calculations", () => {
       { period: "2026-04", status: "partial" as const, totalAmount: 1000, paidAmount: 300, balanceAmount: 700 },
     ], []);
     expect(summary).toMatchObject({ income: 300, pending: 700, paidInvoiceCount: 1, pendingInvoiceCount: 1, net: 300 });
+  });
+
+  it("aggregates outstanding balances across billing periods by room", () => {
+    const report = getArrearsByRoom([
+      { roomId: 1, roomNumber: "A-1", tenantName: "คุณเอ", period: "2026-03", status: "unpaid" as const, totalAmount: 5000 },
+      { roomId: 1, roomNumber: "A-1", tenantName: "คุณเอ", period: "2026-04", status: "partial" as const, totalAmount: 6000, paidAmount: 2500, balanceAmount: 3500 },
+      { roomId: 2, roomNumber: "A-2", tenantName: "คุณบี", period: "2026-04", status: "paid" as const, totalAmount: 4000 },
+    ]);
+    expect(report).toEqual([
+      { roomId: 1, roomNumber: "A-1", tenantName: "คุณเอ", invoiceCount: 2, periods: ["2026-03", "2026-04"], billed: 11000, paid: 2500, balance: 8500 },
+    ]);
   });
 
   it("builds six chronological months ending at the selected report month", () => {

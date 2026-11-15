@@ -957,3 +957,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .bill-status.bill-partial { color: #d6a85e; }
 .bill-status.bill-partial i { background: #d6a85e; }
 .payment-stamp.is-partial { border-color: #d6a85e; color: #b18136; }
+
+
+.arrears-report-panel { min-width: 0; }
+.arrears-report-table { overflow-x: auto; padding: 0 14px 10px; }
+.arrears-report-head, .arrears-report-row { display: grid; grid-template-columns: minmax(180px, 1.6fr) minmax(120px, 1.1fr) minmax(100px, .8fr) minmax(90px, .7fr) minmax(105px, .85fr) 18px; align-items: center; gap: 10px; min-width: 720px; }
+.arrears-report-head { min-height: 34px; border-bottom: 1px solid #2d3a33; color: #94a198; font-size: 9px; }
+.arrears-report-row { width: 100%; min-height: 58px; padding: 7px 3px; border: 0; border-bottom: 1px solid #26332d; background: transparent; color: #dce6df; text-align: left; cursor: pointer; }
+.arrears-report-row:hover { background: #202b26; }
+.arrears-room-cell { display: flex; align-items: center; min-width: 0; gap: 8px; }
+.arrears-room-cell > span { display: grid; min-width: 0; gap: 3px; }
+.arrears-room-cell strong { overflow: hidden; color: #e0e9e2; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.arrears-room-cell small, .arrears-periods { overflow: hidden; color: #95a39a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.arrears-report-row > strong { color: #dce6df; font-size: 10px; text-align: right; white-space: nowrap; }
+.arrears-report-row > .arrears-paid { color: #86d1b6; }
+.arrears-report-row > .arrears-balance { color: #f0c97d; font-size: 11px; }
+@media screen and (max-width: 560px) {
+  .arrears-report-table { padding: 0 9px 8px; }
+  .arrears-report-head, .arrears-report-row { gap: 7px; min-width: 650px; grid-template-columns: minmax(155px, 1.5fr) minmax(100px, 1fr) minmax(85px, .8fr) minmax(75px, .7fr) minmax(90px, .85fr) 15px; }
+  .arrears-report-head { font-size: 8px; }
+  .arrears-report-row { min-height: 54px; }
+  .arrears-room-cell strong { font-size: 9px; }
+  .arrears-room-cell small, .arrears-periods { font-size: 8px; }
+  .arrears-report-row > strong { font-size: 9px; }
+}

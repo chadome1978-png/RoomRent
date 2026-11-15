@@ -1,7 +1,7 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, FileText, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatMoney, formatPeriod, currentPeriod, shiftPeriod, type RentalExpense, type RentalInvoice } from "./types";
-import { EXPENSE_CATEGORIES, getExpenseCategoryTotals, getExpensesForMonth, getMonthlyFinanceSummary, getPaidInvoicesForMonth, getPendingInvoicesForMonth, getSixMonthCashFlow } from "./finance";
+import { EXPENSE_CATEGORIES, getArrearsByRoom, getExpenseCategoryTotals, getExpensesForMonth, getInvoiceBalanceAmount, getMonthlyFinanceSummary, getPaidInvoicesForMonth, getSixMonthCashFlow } from "./finance";
 
 function compactMoney(value: number) {
   const amount = Math.abs(value);
@@ -27,7 +27,8 @@ export function FinanceDashboard({ period, invoices, expenses, onPeriodChange, o
   const chartData = getSixMonthCashFlow(period, invoices, expenses);
   const monthExpenses = getExpensesForMonth(period, expenses).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   const paidInvoices = getPaidInvoicesForMonth(period, invoices).sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
-  const pendingInvoices = getPendingInvoicesForMonth(period, invoices);
+  const arrearsByRoom = getArrearsByRoom(invoices);
+  const totalArrears = arrearsByRoom.reduce((sum, item) => sum + item.balance, 0);
   const categories = getExpenseCategoryTotals(monthExpenses);
   const today = currentPeriod();
   const chartHasData = chartData.some(item => item.income > 0 || item.expenses > 0);
@@ -53,6 +54,11 @@ export function FinanceDashboard({ period, invoices, expenses, onPeriodChange, o
         <article className="finance-kpi finance-kpi-expense"><div className="finance-kpi-top"><span>รายจ่าย</span><i><ArrowUpRight size={18} /></i></div><strong>{formatMoney(summary.expenses)}</strong><small>{summary.expenseCount} รายการในเดือนนี้</small></article>
         <article className={`finance-kpi finance-kpi-net${summary.net < 0 ? " is-negative" : ""}`}><div className="finance-kpi-top"><span>เงินคงเหลือสุทธิ</span><i><Wallet size={18} /></i></div><strong>{formatMoney(summary.net)}</strong><small>รายรับลบรายจ่าย</small></article>
         <article className="finance-kpi finance-kpi-pending"><div className="finance-kpi-top"><span>ยอดค้างชำระ</span><i><CircleDollarSign size={18} /></i></div><strong>{formatMoney(summary.pending)}</strong><small>{summary.pendingInvoiceCount} บิลที่ยังไม่ชำระ</small>{summary.pendingInvoiceCount > 0 && <button onClick={onViewUnpaid}>ดูบิลค้าง <ArrowRight size={13} /></button>}</article>
+      </section>
+
+      <section className="panel arrears-report-panel" aria-labelledby="arrears-report-title">
+        <div className="panel-heading finance-panel-heading"><div><span className="eyebrow">รายงานรวมทุกงวด</span><h3 id="arrears-report-title">ยอดค้างชำระแยกตามห้อง</h3></div><span className="finance-count-badge">{arrearsByRoom.length} ห้อง · {formatMoney(totalArrears)}</span></div>
+        {arrearsByRoom.length ? <div className="arrears-report-table"><div className="arrears-report-head"><span>ห้อง / ผู้เช่า</span><span>รอบที่ค้าง</span><span>ยอดบิลรวม</span><span>รับแล้ว</span><span>ยอดค้าง</span></div>{arrearsByRoom.map(item => <button className="arrears-report-row" key={item.roomId} onClick={() => { const invoice = invoices.find(candidate => candidate.roomId === item.roomId && getInvoiceBalanceAmount(candidate) > 0); if (invoice) onOpenInvoice(invoice); }}><span className="arrears-room-cell"><b className="room-chip">{item.roomNumber}</b><span><strong>{item.tenantName}</strong><small>{item.invoiceCount} บิล · {item.periods.map(formatPeriod).join(", ")}</small></span></span><span className="arrears-periods">{item.periods.map(formatPeriod).join(", ")}</span><strong>{formatMoney(item.billed)}</strong><strong className="arrears-paid">{formatMoney(item.paid)}</strong><strong className="arrears-balance">{formatMoney(item.balance)}</strong><ArrowRight className="row-arrow" size={16} /></button>)}</div> : <div className="finance-empty compact"><span className="finance-empty-icon"><CircleDollarSign size={18} /></span><strong>ไม่มีห้องที่มียอดค้างชำระ</strong><span>เมื่อมีบิลค้าง รายงานจะแสดงยอดแยกตามห้องที่นี่</span></div>}
       </section>
 
       <section className="panel finance-chart-panel">
