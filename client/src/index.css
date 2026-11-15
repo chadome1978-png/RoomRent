@@ -810,6 +810,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 
 @media screen {
+  .auth-gate { min-height: 100vh; display: grid; align-content: start; gap: 28px; padding: 32px clamp(16px, 5vw, 72px); background: #111713; color: #e5eee8; }
+  .auth-gate > .brand-lockup { width: min(100%, 920px); margin: 0 auto; }
+  .auth-gate > .supabase-rooms-panel { width: min(100%, 920px); margin: 0 auto; }
   .supabase-rooms-panel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: 0 0 17px; padding: 14px 16px; border: 1px solid #34483c; border-radius: 12px; background: linear-gradient(115deg, #1b2a23, #18211d); }
   .supabase-rooms-panel.is-connected { border-color: #315341; }
   .supabase-panel-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: #243b30; color: #79d0b2; }

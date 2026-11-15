@@ -1,4 +1,4 @@
-import { Check, Copy, FileText, Pencil, Printer, QrCode, Settings2, Share2, X } from "lucide-react";
+import { Check, Copy, FileText, Pencil, Printer, QrCode, Settings2, Share2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { PromptPayQr } from "./PromptPayQr";
 import { formatMoney, formatPeriod, formatThaiDate, type PromptPaySettings, type RentalInvoice } from "./types";
@@ -7,6 +7,7 @@ type Props = {
   invoice: RentalInvoice;
   onClose: () => void;
   onSetPaid: (invoice: RentalInvoice) => void;
+  onDelete: (invoice: RentalInvoice) => void;
   onEdit: (invoice: RentalInvoice) => void;
   onConfigurePromptPay: () => void;
   promptPaySettings?: PromptPaySettings;
@@ -31,7 +32,7 @@ function invoiceMessage(invoice: RentalInvoice) {
   ].filter(Boolean).join("\n");
 }
 
-export function InvoicePreview({ invoice, onClose, onSetPaid, onEdit, onConfigurePromptPay, promptPaySettings, busy }: Props) {
+export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, onConfigurePromptPay, promptPaySettings, busy }: Props) {
   const [copied, setCopied] = useState(false);
   const totalExtras = (invoice.extras || []).reduce((sum, item) => sum + Number(item.amount), 0);
 
@@ -106,6 +107,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onEdit, onConfigur
         </div>
         <footer className="invoice-actions">
           {invoice.status === "unpaid" && <button className="button button-outline" onClick={() => onEdit(invoice)}><Pencil size={16} />แก้ไขบิล</button>}
+          {invoice.status === "unpaid" && <button className="button button-outline invoice-delete-button" disabled={busy} onClick={() => onDelete(invoice)}><Trash2 size={16} />ลบบิล</button>}
           <button className="button button-quiet" onClick={copyText}><Copy size={16} />{copied ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</button>
           <button className="button line-button" onClick={shareLine}><Share2 size={16} />ส่งทาง LINE</button>
           <button className="button button-outline print-button" onClick={() => window.print()}><Printer size={16} />พิมพ์ / บันทึก PDF</button>

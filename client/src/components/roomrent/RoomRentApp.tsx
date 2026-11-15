@@ -21,8 +21,8 @@ import {
   Plus,
   QrCode,
   Search,
-  ShieldAlert,
   SlidersHorizontal,
+  Trash2,
   Upload,
   UsersRound,
   Wallet,
@@ -38,8 +38,9 @@ import { RoomDialog } from "./RoomDialog";
 import { RoomRentMark } from "./RoomRentMark";
 import { UtilityRatesPanel } from "./UtilityRatesPanel";
 import { mergeMigrationData } from "./accountMigration";
-import { fetchSupabaseSharedData, saveSupabaseSharedData } from "./supabaseSharedData";
-import { isSupabaseRoomsConfigured } from "./supabaseClient";
+import { fetchSupabaseAccountData, saveSupabaseAccountData } from "./supabaseAccountData";
+import { getSupabaseRoomUser, isSupabaseRoomsConfigured, onSupabaseRoomAuthChange, signInToSupabaseRooms, signOutFromSupabaseRooms, signUpForSupabaseRooms, verifySupabaseSignupOtp, resendSupabaseSignupConfirmation } from "./supabaseRooms";
+import { SupabaseAccountPanel } from "./SupabaseAccountPanel";
 import {
   currentPeriod,
   emptyLocalDatabase,
@@ -104,6 +105,8 @@ export function RoomRentApp() {
   const [localBackupExported, setLocalBackupExported] = useState(false);
   const [localBackupConfirmed, setLocalBackupConfirmed] = useState(false);
   const [supabaseLoading, setSupabaseLoading] = useState(isSupabaseRoomsConfigured);
+  const [authChecked, setAuthChecked] = useState(!isSupabaseRoomsConfigured);
+  const [authEmail, setAuthEmail] = useState<string>();
   const [supabaseError, setSupabaseError] = useState("");
   const [cloudReady, setCloudReady] = useState(false);
   const cloudRevision = useRef(0);
@@ -133,23 +136,34 @@ export function RoomRentApp() {
   useEffect(() => {
     if (!isSupabaseRoomsConfigured) return;
     let active = true;
-    async function refreshSharedData() {
+    async function refreshAccountData() {
       setSupabaseLoading(true);
       setSupabaseError("");
       try {
-        const shared = await fetchSupabaseSharedData();
-        if (active) setSharedData(shared.document ?? emptyLocalDatabase(), shared.revision, true);
+        const user = await getSupabaseRoomUser();
+        if (!user) {
+          if (active) { setAuthEmail(undefined); setAuthChecked(true); setCloudReady(false); }
+          return;
+        }
+        const account = await fetchSupabaseAccountData();
+        if (active) {
+          setAuthEmail(user.email ?? undefined);
+          setSharedData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document));
+          setAuthChecked(true);
+        }
       } catch {
         if (active) {
           setSharedData(emptyLocalDatabase(), 0, false);
-          setSupabaseError("โหลดข้อมูล shared จาก Supabase ไม่สำเร็จ กรุณาตรวจ schema, RLS และการเชื่อมต่อ");
+          setAuthChecked(true);
+          setSupabaseError("โหลดข้อมูลบัญชีจาก Supabase ไม่สำเร็จ กรุณาตรวจ Auth, RLS และ schema");
         }
       } finally {
         if (active) setSupabaseLoading(false);
       }
     }
-    void refreshSharedData();
-    return () => { active = false; };
+    void refreshAccountData();
+    const unsubscribe = onSupabaseRoomAuthChange(() => { void refreshAccountData(); });
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   function setSharedData(nextData: LocalDatabase, revision: number, ready: boolean) {
@@ -164,7 +178,7 @@ export function RoomRentApp() {
 
   async function updateData(transform: (current: LocalDatabase) => LocalDatabase): Promise<boolean> {
     if (isSupabaseRoomsConfigured && !cloudReady) {
-      toast.error("กำลังเชื่อมต่อ shared Cloud หรือข้อมูลยังโหลดไม่สำเร็จ");
+      toast.error("กำลังเชื่อมต่อ account Cloud หรือข้อมูลยังโหลดไม่สำเร็จ");
       return false;
     }
     const next = transform(dataRef.current);
@@ -185,7 +199,7 @@ export function RoomRentApp() {
     const operation = cloudWriteQueue.current.then(async () => {
       if (writeEpoch !== cloudEpoch.current) throw new Error("Shared dataset changed before save");
       if (cloudWriteBlocked.current) throw new Error("Cloud writes paused after a previous failure");
-      const revision = await saveSupabaseSharedData(next, cloudRevision.current);
+      const revision = await saveSupabaseAccountData(next, cloudRevision.current);
       if (writeEpoch !== cloudEpoch.current) throw new Error("Shared dataset changed during save");
       cloudRevision.current = revision;
       confirmedCloudData.current = next;
@@ -196,14 +210,14 @@ export function RoomRentApp() {
       const confirmed = confirmedCloudData.current;
       dataRef.current = confirmed;
       setData(confirmed);
-      setSupabaseError("บันทึก shared Cloud ไม่สำเร็จหรือมีการแก้ไขจากอุปกรณ์อื่น กรุณาโหลดข้อมูลใหม่ก่อนลองอีกครั้ง");
+      setSupabaseError("บันทึก account Cloud ไม่สำเร็จหรือมีการแก้ไขจากอุปกรณ์อื่น กรุณาโหลดข้อมูลใหม่ก่อนลองอีกครั้ง");
     });
     try {
       await operation;
       setSupabaseError("");
       return true;
     } catch {
-      toast.error("บันทึกข้อมูล shared Cloud ไม่สำเร็จ ข้อมูลเดิมยังไม่ถูกแทนที่");
+      toast.error("บันทึกข้อมูล account Cloud ไม่สำเร็จ ข้อมูลเดิมยังไม่ถูกแทนที่");
       return false;
     }
   }
@@ -247,7 +261,7 @@ export function RoomRentApp() {
       toast.error("มีเลขห้องนี้อยู่แล้ว");
       return;
     }
-    if (isSupabaseRoomsConfigured && !cloudReady) { toast.error("ข้อมูล shared Cloud ยังโหลดไม่พร้อม"); return; }
+    if (isSupabaseRoomsConfigured && !cloudReady) { toast.error("ข้อมูล account Cloud ยังโหลดไม่พร้อม"); return; }
     const now = new Date().toISOString();
     const room: RentalRoom = {
       ...values,
@@ -273,7 +287,7 @@ export function RoomRentApp() {
       setRoomDialog(true);
       return;
     }
-    if (isSupabaseRoomsConfigured && !cloudReady) { toast.error("ข้อมูล shared Cloud ยังโหลดไม่พร้อม"); return; }
+    if (isSupabaseRoomsConfigured && !cloudReady) { toast.error("ข้อมูล account Cloud ยังโหลดไม่พร้อม"); return; }
     const status: RentalRoom["status"] = room.status === "occupied" ? "vacant" : "occupied";
     const updated: RentalRoom = { ...room, status, updatedAt: new Date().toISOString() };
     if (await updateData(current => ({ ...current, rooms: current.rooms.map(item => item.id === room.id ? updated : item) }))) {
@@ -378,6 +392,30 @@ export function RoomRentApp() {
     setSelectedInvoice(current => current ? { ...current, status } : null);
     toast.success(status === "paid" ? "บันทึกการชำระเงินแล้ว" : "เปลี่ยนสถานะเป็นรอชำระแล้ว");
   }
+  async function deleteInvoice(invoice: RentalInvoice) {
+    const currentInvoice = dataRef.current.invoices.find(item => item.id === invoice.id);
+    if (!currentInvoice || currentInvoice.status !== "unpaid") {
+      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้ชำระเงินแล้ว");
+      setSelectedInvoice(current => current?.id === invoice.id ? { ...current, status: "paid" } : current);
+      return;
+    }
+    if (!window.confirm(`ลบบิลห้อง ${currentInvoice.roomNumber} รอบ ${formatPeriod(currentInvoice.period)} ยอด ${formatMoney(currentInvoice.totalAmount)} หรือไม่`)) return;
+    let deleted = false;
+    const saved = await updateData(current => {
+      const target = current.invoices.find(item => item.id === invoice.id);
+      if (!target || target.status !== "unpaid") return current;
+      deleted = true;
+      return { ...current, invoices: current.invoices.filter(item => item.id !== invoice.id) };
+    });
+    if (!saved) return;
+    if (!deleted) {
+      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้ชำระเงินแล้ว");
+      return;
+    }
+    setSelectedInvoice(null);
+    setEditingInvoice(null);
+    toast.success("ลบบิลที่ยังไม่ชำระแล้ว");
+  }
 
   async function savePromptPaySettings(settings: PromptPaySettings) {
     if (!await updateData(current => ({ ...current, promptPay: settings }))) return;
@@ -432,17 +470,55 @@ export function RoomRentApp() {
     setCloudReady(false);
     setSupabaseError("");
     try {
-      const shared = await fetchSupabaseSharedData();
-      setSharedData(shared.document ?? emptyLocalDatabase(), shared.revision, true);
-      toast.success("โหลดข้อมูล shared ล่าสุดแล้ว");
+      const account = await fetchSupabaseAccountData();
+      setSharedData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document));
+      toast.success("โหลดข้อมูลบัญชีล่าสุดแล้ว");
     } catch {
       setSharedData(emptyLocalDatabase(), 0, false);
-      setSupabaseError("โหลดข้อมูล shared จาก Supabase ไม่สำเร็จ กรุณาตรวจ schema, RLS และการเชื่อมต่อ");
+      setSupabaseError("โหลดข้อมูลบัญชีจาก Supabase ไม่สำเร็จ กรุณาตรวจ Auth, RLS และ schema");
     } finally {
       setSupabaseLoading(false);
     }
   }
 
+  async function handleSignIn(username: string, password: string) {
+    await signInToSupabaseRooms(username, password);
+    const user = await getSupabaseRoomUser();
+    if (!user) throw new Error("ไม่พบบัญชีที่เข้าสู่ระบบ");
+    const account = await fetchSupabaseAccountData();
+    setAuthEmail(user.email ?? undefined);
+    setAuthChecked(true);
+    setSharedData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document));
+  }
+  async function handleSignUp(email: string, password: string) {
+    const result = await signUpForSupabaseRooms(email, password);
+    if (result.user?.email && result.needsEmailConfirmation) return true;
+    if (result.user) {
+      const account = await fetchSupabaseAccountData();
+      setAuthEmail(result.user.email ?? undefined);
+      setAuthChecked(true);
+      setSharedData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document));
+    }
+    return false;
+  }
+  async function handleInitializeEmpty() {
+    const revision = await saveSupabaseAccountData(emptyLocalDatabase(), 0);
+    setSharedData(emptyLocalDatabase(), revision, true);
+    toast.success("เริ่ม account Cloud เปล่าแล้ว");
+  }
+  async function handleMigrateLocalData() {
+    const local = readLocalDatabase();
+    const merged = mergeMigrationData(dataRef.current, local, []);
+    const revision = await saveSupabaseAccountData(merged, cloudRevision.current);
+    setSharedData(merged, revision, true);
+    toast.success("ย้ายข้อมูลเข้า account Cloud แล้ว");
+  }
+  async function handleSignOut() {
+    await signOutFromSupabaseRooms();
+    setAuthEmail(undefined);
+    setAuthChecked(true);
+    setSharedData(emptyLocalDatabase(), 0, false);
+  }
   function downloadBackup(backupData: LocalDatabase, label: string) {
     const backup = {
       app: "RoomRent",
@@ -464,10 +540,10 @@ export function RoomRentApp() {
 
   function exportBackup() {
     if (isSupabaseRoomsConfigured && !cloudReady) {
-      toast.error("ยังโหลดข้อมูล shared ไม่ครบ จึงไม่สามารถสร้างไฟล์สำรองที่ถูกต้องได้");
+      toast.error("ยังโหลดข้อมูล account Cloud ไม่ครบ จึงไม่สามารถสร้างไฟล์สำรองที่ถูกต้องได้");
       return;
     }
-    downloadBackup(isSupabaseRoomsConfigured ? dataRef.current : readLocalDatabase(), isSupabaseRoomsConfigured ? "shared" : "device");
+    downloadBackup(isSupabaseRoomsConfigured ? dataRef.current : readLocalDatabase(), isSupabaseRoomsConfigured ? "account" : "device");
   }
 
   function exportLocalBackup() {
@@ -487,14 +563,14 @@ export function RoomRentApp() {
     if (!file) return;
     try {
       if (isSupabaseRoomsConfigured && hasLocalBackupData && (!localBackupExported || !localBackupConfirmed)) {
-        throw new Error("กรุณาส่งออกและยืนยันว่าเก็บ backup ข้อมูลเดิมในอุปกรณ์แล้ว ก่อนนำข้อมูลใด ๆ เข้า shared dataset สาธารณะ");
+        throw new Error("กรุณาส่งออกและยืนยันว่าเก็บ backup ข้อมูลเดิมในอุปกรณ์แล้ว ก่อนนำข้อมูลใด ๆ เข้า account Cloud");
       }
       const imported = parseLocalDatabase(JSON.parse(await file.text()));
       if (!imported) throw new Error("รูปแบบไฟล์ไม่ถูกต้องหรือไม่ใช่ไฟล์สำรอง RoomRent");
-      if (isSupabaseRoomsConfigured && !cloudReady) throw new Error("ข้อมูล shared Cloud ยังโหลดไม่พร้อม กรุณาโหลดใหม่ก่อนกู้คืนไฟล์");
+      if (isSupabaseRoomsConfigured && !cloudReady) throw new Error("ข้อมูล account Cloud ยังโหลดไม่พร้อม กรุณาโหลดใหม่ก่อนกู้คืนไฟล์");
       const details = `${imported.rooms.length} ห้อง, ${imported.invoices.length} บิล และ ${imported.expenses.length} รายจ่าย${imported.promptPay ? " พร้อมการตั้งค่า PromptPay" : ""}`;
       const destination = isSupabaseRoomsConfigured
-        ? "ข้อมูลจะถูกรวมใน shared dataset สาธารณะ ผู้เข้าถึงแอปหรือ Supabase API ทุกคนอ่าน เพิ่ม แก้ไข ลบ หรือแทนที่/ล้างข้อมูลทั้งชุดได้"
+        ? "ข้อมูลจะถูกรวมใน account Cloud ของบัญชีที่เข้าสู่ระบบและถูกคุ้มครองด้วย RLS"
         : "ข้อมูลจะถูกรวมในอุปกรณ์นี้";
       if (!window.confirm(`นำเข้า ${details} หรือไม่? ${destination} ระบบจะคงรายการเดิมไว้ ตรวจหารายการขัดแย้ง และไม่เขียนหากพบข้อมูลที่ต้องตัดสินใจเอง`)) return;
       const merged = mergeMigrationData(dataRef.current, imported, []);
@@ -509,6 +585,27 @@ export function RoomRentApp() {
     }
   }
 
+  if (isSupabaseRoomsConfigured && (!authChecked || !authEmail || !cloudReady)) {
+    const sourceData = readLocalDatabase();
+    return <div className="auth-gate"><RoomRentMark /><SupabaseAccountPanel
+      configured={isSupabaseRoomsConfigured}
+      loading={supabaseLoading || !authChecked}
+      email={authEmail}
+      ready={cloudReady}
+      hasCloudData={cloudReady}
+      sourceData={sourceData}
+      error={supabaseError}
+      busy={supabaseLoading}
+      onSignIn={handleSignIn}
+      onSignUp={handleSignUp}
+      onResendVerification={resendSupabaseSignupConfirmation}
+      onVerifyEmailOtp={async (email, token) => { await verifySupabaseSignupOtp(email, token); const user = await getSupabaseRoomUser(); if (!user) throw new Error("ไม่พบบัญชีที่ยืนยัน"); const account = await fetchSupabaseAccountData(); setAuthEmail(user.email ?? email); setAuthChecked(true); setSharedData(account.document ?? emptyLocalDatabase(), account.revision, Boolean(account.document)); }}
+      onSignOut={handleSignOut}
+      onDownloadBackup={() => downloadBackup(sourceData, "device")}
+      onMigrateLocalData={handleMigrateLocalData}
+      onInitializeEmpty={handleInitializeEmpty}
+    /></div>;
+  }
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -522,7 +619,7 @@ export function RoomRentApp() {
           <button className={`nav-item${view === "rates" ? " is-active" : ""}`} onClick={() => setView("rates")}><Icon><SlidersHorizontal size={18} /></Icon><span>มาสเตอร์ค่าน้ำ–ไฟ</span></button>
         </nav>
         <div className="sidebar-lower">
-          <div className="sidebar-tip"><div className="tip-icon"><CircleHelp size={16} /></div><strong>{isSupabaseRoomsConfigured ? "ข้อมูลร่วมสาธารณะ" : "จัดเก็บในอุปกรณ์นี้"}</strong><span>{isSupabaseRoomsConfigured ? "ทุกคนที่เข้าถึงแอป/API อ่าน เพิ่ม แก้ไข ลบ หรือแทนที่ชุดข้อมูลได้" : "ข้อมูลอยู่ในอุปกรณ์นี้ · สำรองไฟล์ไว้เป็นประจำ"}</span><button className="local-backup-link" onClick={() => setDataToolsOpen(true)}><Download size={14} />สำรอง / กู้คืนข้อมูล</button><button className="local-backup-link" onClick={() => setPromptPaySettingsOpen(true)}><QrCode size={14} />ตั้งค่า QR PromptPay</button></div>
+          <div className="sidebar-tip"><div className="tip-icon"><CircleHelp size={16} /></div><strong>{isSupabaseRoomsConfigured ? "ข้อมูล Cloud ส่วนตัว" : "จัดเก็บในอุปกรณ์นี้"}</strong><span>{isSupabaseRoomsConfigured ? "จำกัดการเข้าถึงตามบัญชี Supabase และ RLS" : "ข้อมูลอยู่ในอุปกรณ์นี้ · สำรองไฟล์ไว้เป็นประจำ"}</span><button className="local-backup-link" onClick={() => setDataToolsOpen(true)}><Download size={14} />สำรอง / กู้คืนข้อมูล</button><button className="local-backup-link" onClick={() => setPromptPaySettingsOpen(true)}><QrCode size={14} />ตั้งค่า QR PromptPay</button></div>
           <div className="account-row"><div className="avatar"><Database size={17} /></div><div className="account-info"><strong>{isSupabaseRoomsConfigured ? "Shared dataset" : "ข้อมูลในอุปกรณ์"}</strong><span>{rooms.length} ห้อง · {invoices.length} บิล · {expenses.length} รายจ่าย</span></div></div>
         </div>
       </aside>
@@ -530,7 +627,7 @@ export function RoomRentApp() {
       <div className="mobile-topbar"><RoomRentMark /><div className="mobile-top-actions"><span className="local-device-badge"><Database size={14} />{isSupabaseRoomsConfigured ? "Supabase" : "ในเครื่อง"}</span><button className="icon-button" aria-label="ตั้งค่า QR PromptPay" title="ตั้งค่า QR PromptPay" onClick={() => setPromptPaySettingsOpen(true)}><QrCode size={17} /></button><button className="icon-button" aria-label="สำรองหรือกู้คืนข้อมูล" onClick={() => setDataToolsOpen(true)}><Download size={17} /></button></div></div>
       <main className="main-area">
         <header className="page-header">
-          <div className="page-title-wrap"><span className="eyebrow">ศูนย์จัดการห้องเช่า · {isSupabaseRoomsConfigured ? "shared dataset สาธารณะ" : "ข้อมูลในอุปกรณ์นี้"}</span><h1>{view === "overview" ? "ภาพรวม" : view === "rooms" ? "ห้องพักทั้งหมด" : view === "finance" ? "รายรับ-รายจ่าย" : view === "rates" ? "มาสเตอร์ค่าน้ำ–ค่าไฟ" : "บิลค่าเช่า"}</h1></div>
+          <div className="page-title-wrap"><span className="eyebrow">ศูนย์จัดการห้องเช่า · {isSupabaseRoomsConfigured ? "ข้อมูล Cloud ตามบัญชี" : "ข้อมูลในอุปกรณ์นี้"}</span><h1>{view === "overview" ? "ภาพรวม" : view === "rooms" ? "ห้องพักทั้งหมด" : view === "finance" ? "รายรับ-รายจ่าย" : view === "rates" ? "มาสเตอร์ค่าน้ำ–ค่าไฟ" : "บิลค่าเช่า"}</h1></div>
           <div className="page-actions">
             {view === "overview" && <div className="period-control"><button className="icon-button" onClick={() => setPeriod(current => shiftPeriod(current, -1))} aria-label="เดือนก่อนหน้า"><ChevronLeft size={17} /></button><span>{monthLabel(period)}</span><button className="icon-button" onClick={() => setPeriod(current => shiftPeriod(current, 1))} aria-label="เดือนถัดไป" disabled={isCurrentMonth}><ChevronRight size={17} /></button></div>}
             <button className="button button-primary header-cta" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length || (isSupabaseRoomsConfigured && (!cloudReady || supabaseLoading))}><FilePlus2 size={17} /><span>ออกบิลใหม่</span></button>
@@ -538,11 +635,10 @@ export function RoomRentApp() {
         </header>
 
         <div className="page-content">
-          {isSupabaseRoomsConfigured && <section className="public-data-warning" role="alert"><div><strong>ข้อมูลชุดนี้เปิดสาธารณะ</strong><span>ผู้ที่เข้าถึงแอปหรือ Supabase API ได้ อ่าน เพิ่ม แก้ไข ลบ หรือแทนที่ข้อมูลห้อง ผู้เช่า เบอร์ติดต่อ บิล สถานะชำระ รายจ่าย และ PromptPay ได้ รวมถึงอาจล้างข้อมูลทั้งชุดผ่าน RPC; revision ช่วยตรวจการแก้ไขชนกัน แต่ไม่ป้องกันการลบโดยผู้ไม่หวังดี อย่าบันทึกข้อมูลที่ไม่ประสงค์เปิดเผย</span></div><ShieldAlert size={20} aria-hidden="true" /></section>}
           {isSupabaseRoomsConfigured && hasLocalBackupData && <section className="local-data-notice"><div><strong>พบข้อมูลเดิมในอุปกรณ์นี้</strong><span>ข้อมูลยังอยู่ในเครื่องและไม่ได้อัปโหลดอัตโนมัติ; ส่งออกสำรองและเลือกนำเข้าเองได้จากเมนูสำรอง/กู้คืน</span></div><button onClick={() => setDataToolsOpen(true)}>จัดการข้อมูลเดิม</button></section>}
-          {isSupabaseRoomsConfigured && supabaseLoading && <div className="inline-warning" role="status">กำลังโหลด shared dataset จาก Supabase…</div>}
+          {isSupabaseRoomsConfigured && supabaseLoading && <div className="inline-warning" role="status">กำลังโหลด account Cloud จาก Supabase…</div>}
           {isSupabaseRoomsConfigured && supabaseError && <div className="inline-warning public-load-error" role="alert"><span>{supabaseError}</span><button className="button button-quiet" onClick={() => void reloadSharedData()} disabled={supabaseLoading}>โหลดข้อมูลใหม่</button></div>}
-          <div className="local-storage-strip"><Database size={15} /><span>{isSupabaseRoomsConfigured ? "ห้อง บิล รายจ่าย และ PromptPay อยู่ใน shared Cloud · ขณะออฟไลน์เปิดได้เฉพาะ app shell" : "ข้อมูลเก็บในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อป้องกันข้อมูลสูญหาย"}</span><button onClick={() => setDataToolsOpen(true)}>สำรองข้อมูล</button></div>
+          <div className="local-storage-strip"><Database size={15} /><span>{isSupabaseRoomsConfigured ? "ห้อง บิล รายจ่าย และ PromptPay อยู่ใน account Cloud · ขณะออฟไลน์เปิดได้เฉพาะ app shell" : "ข้อมูลเก็บในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อป้องกันข้อมูลสูญหาย"}</span><button onClick={() => setDataToolsOpen(true)}>สำรองข้อมูล</button></div>
           {storageError && <div className="inline-warning storage-warning"><Bell size={15} />{storageError}</div>}
           {view === "overview" ? (
             <>
@@ -569,7 +665,7 @@ export function RoomRentApp() {
             </>
           ) : view === "rooms" ? (
             <>
-              <section className="section-intro"><div><h2>ดูแลข้อมูลผู้เช่าและอัตราค่าใช้จ่าย</h2><p>{isSupabaseRoomsConfigured ? "ข้อมูลที่บันทึกจะเห็นและแก้ไขได้โดยผู้เข้าถึง shared dataset ทุกคน" : "ข้อมูลนี้ใช้เป็นค่าเริ่มต้นเมื่อคำนวณบิลประจำเดือน"}</p></div><button className="button button-primary" disabled={isSupabaseRoomsConfigured && (!cloudReady || supabaseLoading)} onClick={() => { setEditingRoom(null); setRoomDialog(true); }}><Plus size={17} />เพิ่มห้องพัก</button></section>
+              <section className="section-intro"><div><h2>ดูแลข้อมูลผู้เช่าและอัตราค่าใช้จ่าย</h2><p>{isSupabaseRoomsConfigured ? "ข้อมูลที่บันทึกจะเห็นและแก้ไขได้เฉพาะบัญชีที่มีสิทธิ์ตาม RLS" : "ข้อมูลนี้ใช้เป็นค่าเริ่มต้นเมื่อคำนวณบิลประจำเดือน"}</p></div><button className="button button-primary" disabled={isSupabaseRoomsConfigured && (!cloudReady || supabaseLoading)} onClick={() => { setEditingRoom(null); setRoomDialog(true); }}><Plus size={17} />เพิ่มห้องพัก</button></section>
               <div className="filter-bar"><label className="search-field"><Search size={17} /><input value={roomSearch} onChange={event => setRoomSearch(event.target.value)} placeholder="ค้นหาเลขห้อง ชื่อ หรือเบอร์โทร" /></label><span className="filter-count">{filteredRooms.length} จาก {activeRooms.length} ห้อง</span></div>
               <section className="rooms-grid">{filteredRooms.map(room => <RoomCard key={room.id} room={room} hasBill={invoices.some(invoice => invoice.roomId === room.id && invoice.period === period)} onEdit={() => { setEditingRoom(room); setRoomDialog(true); }} onToggle={() => setRoomOccupancy(room)} onCreateInvoice={() => setInvoiceDialog(true)} />)}{!filteredRooms.length && <div className="full-span"><EmptyState icon={<Home size={21} />} title={activeRooms.length ? "ไม่พบห้องที่ค้นหา" : "เริ่มต้นด้วยการเพิ่มห้องพัก"} description={activeRooms.length ? "ลองเปลี่ยนคำค้นหาอีกครั้ง" : "เพิ่มรายละเอียดห้องและผู้เช่า เพื่อเริ่มออกบิลและติดตามค่าเช่ารายเดือนได้เลย"} action={!activeRooms.length ? <button className="button button-primary button-sm" onClick={() => setRoomDialog(true)}><Plus size={15} />เพิ่มห้องแรก</button> : undefined} /></div>}</section>
             </>
@@ -592,35 +688,35 @@ export function RoomRentApp() {
               <section className="section-intro"><div><h2>บิลที่ออกให้ผู้เช่า</h2><p>ค้นย้อนหลังตามห้องและรอบเดือน แล้วเปิดดูเพื่อพิมพ์หรือส่งต่อ</p></div><button className="button button-primary" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><FilePlus2 size={17} />ออกบิลใหม่</button></section>
               <div className="filter-bar invoice-filters"><label className="search-field"><Search size={17} /><input value={invoiceSearch} onChange={event => setInvoiceSearch(event.target.value)} placeholder="ค้นหาเลขห้อง ผู้เช่า หรือรอบบิล" /></label><label className="select-filter"><span>ห้อง</span><select value={invoiceRoomFilter} onChange={event => setInvoiceRoomFilter(event.target.value)}><option value="all">ทุกห้อง</option>{rooms.filter(room => room.status !== "archived").map(room => <option key={room.id} value={String(room.id)}>{room.roomNumber}</option>)}</select><ChevronDown size={14} /></label><label className="select-filter"><span>รอบเดือน</span><select value={invoicePeriodFilter} onChange={event => setInvoicePeriodFilter(event.target.value)}><option value="all">ทั้งหมด</option>{Array.from(new Set(invoices.map(invoice => invoice.period))).sort((a, b) => b.localeCompare(a)).map(item => <option value={item} key={item}>{formatPeriod(item)}</option>)}</select><ChevronDown size={14} /></label></div>
               <section className="panel history-panel">{filteredInvoices.length ? <div className="history-list"><div className="history-list-head"><span>ห้องพัก / ผู้เช่า</span><span>รอบบิล</span><span>วันครบกำหนด</span><span>ยอดสุทธิ</span><span>สถานะ</span><span /></div>{filteredInvoices.map(invoice => <button className="history-row" key={invoice.id} onClick={() => setSelectedInvoice(invoice)}><span className="room-cell"><b className="room-chip">{invoice.roomNumber}</b><span><strong>{invoice.tenantName}</strong><small>{invoice.phone || "ไม่มีเบอร์ติดต่อ"}</small></span></span><span className="history-period">{formatPeriod(invoice.period)}</span><span className="table-date">{formatThaiDate(invoice.dueDate)}</span><strong className="table-amount">{formatMoney(invoice.totalAmount)}</strong><BillStatus status={invoice.status} /><ArrowRight className="row-arrow" size={16} /></button>)}</div> : <EmptyState icon={<FileText size={21} />} title="ยังไม่มีบิลที่ตรงกับรายการนี้" description="ลองเปลี่ยนตัวกรอง หรือออกบิลใหม่จากห้องที่มีผู้เช่า" action={!invoices.length ? <button className="button button-primary button-sm" disabled={!occupiedRooms.length} onClick={() => setInvoiceDialog(true)}><Plus size={15} />ออกบิลใหม่</button> : undefined} />}</section>
-              <div className="history-footnote"><FileClock size={15} />{isSupabaseRoomsConfigured ? "ข้อมูลบิลอยู่ใน shared Cloud ที่เปิดสาธารณะ · ส่งออกไฟล์สำรองก่อนกู้คืน" : "ข้อมูลบิลอยู่ในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อย้ายหรือกู้คืน"}</div>
+              <div className="history-footnote"><FileClock size={15} />{isSupabaseRoomsConfigured ? "ข้อมูลบิลอยู่ใน account Cloud ที่จำกัดตามบัญชี · ส่งออกไฟล์สำรองก่อนกู้คืน" : "ข้อมูลบิลอยู่ในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อย้ายหรือกู้คืน"}</div>
             </>
           )}
         </div>
-        <footer className="app-footer"><span>RoomRent <i>·</i> ดูแลค่าเช่าอย่างเป็นระบบ</span><span>{isSupabaseRoomsConfigured ? "shared dataset สาธารณะบน Supabase · ใช้งานข้อมูลเมื่อออนไลน์" : "ข้อมูลจัดเก็บในอุปกรณ์นี้ · สำรองไฟล์เป็นประจำ"}</span></footer>
+        <footer className="app-footer"><span>RoomRent <i>·</i> ดูแลค่าเช่าอย่างเป็นระบบ</span><span>{isSupabaseRoomsConfigured ? "ข้อมูล Cloud ตามบัญชีบน Supabase · ใช้งานข้อมูลเมื่อออนไลน์" : "ข้อมูลจัดเก็บในอุปกรณ์นี้ · สำรองไฟล์เป็นประจำ"}</span></footer>
       </main>
       <nav className="mobile-nav" aria-label="เมนูหลัก"><button className={view === "overview" ? "is-active" : ""} onClick={() => setView("overview")}><LayoutDashboard size={19} /><span>ภาพรวม</span></button><button className={view === "rooms" ? "is-active" : ""} onClick={() => setView("rooms")}><Home size={19} /><span>ห้องพัก</span></button><button className={view === "bills" ? "is-active" : ""} onClick={() => setView("bills")}><FileText size={19} /><span>บิล</span></button><button className={view === "finance" ? "is-active" : ""} onClick={() => setView("finance")}><BarChart3 size={19} /><span>การเงิน</span></button><button className={view === "rates" ? "is-active" : ""} onClick={() => setView("rates")}><SlidersHorizontal size={19} /><span>Master</span></button><button className="mobile-add" onClick={() => setInvoiceDialog(true)} disabled={!occupiedRooms.length}><Plus size={21} /><span>ออกบิล</span></button></nav>
 
       {roomDialog && <RoomDialog room={editingRoom} defaultRates={utilityRates} busy={roomBusy} onClose={() => { setRoomDialog(false); setEditingRoom(null); }} onSave={saveRoom} />}
       {invoiceDialog && <InvoiceComposer rooms={editingInvoice ? rooms.filter(room => room.status === "occupied" || room.id === editingInvoice.roomId) : occupiedRooms} invoices={invoices} period={editingInvoice?.period ?? period} editingInvoice={editingInvoice ?? undefined} onClose={() => { setInvoiceDialog(false); setEditingInvoice(null); }} onSave={saveBill} />}
-      {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
+      {selectedInvoice && <InvoicePreview invoice={selectedInvoice} promptPaySettings={data.promptPay} onConfigurePromptPay={() => setPromptPaySettingsOpen(true)} onClose={() => setSelectedInvoice(null)} onSetPaid={togglePayment} onDelete={deleteInvoice} onEdit={invoice => { setSelectedInvoice(null); setEditingInvoice(invoice); setInvoiceDialog(true); }} busy={false} />}
       {expenseDialogOpen && <ExpenseDialog isSharedDataset={isSupabaseRoomsConfigured} expense={editingExpense ?? undefined} onClose={() => { setExpenseDialogOpen(false); setEditingExpense(null); }} onSave={saveExpense} />}
       {dataToolsOpen && (
         <div className="dialog-scrim" role="presentation" onMouseDown={event => event.target === event.currentTarget && setDataToolsOpen(false)}>
           <section className="dialog-panel data-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="data-tools-title">
             <header className="dialog-header">
-              <div><span className="eyebrow">{isSupabaseRoomsConfigured ? "shared dataset สาธารณะ" : "ข้อมูลในอุปกรณ์นี้"}</span><h2 id="data-tools-title">สำรองและกู้คืน</h2></div>
+              <div><span className="eyebrow">{isSupabaseRoomsConfigured ? "ข้อมูล Cloud ตามบัญชี" : "ข้อมูลในอุปกรณ์นี้"}</span><h2 id="data-tools-title">สำรองและกู้คืน</h2></div>
               <button className="icon-button" onClick={() => setDataToolsOpen(false)} aria-label="ปิด"><ChevronLeft size={19} /></button>
             </header>
             <div className="data-tools-body">
-              <div className="data-local-summary"><Database size={19} /><div><strong>{isSupabaseRoomsConfigured ? "ข้อมูลร่วมบน Supabase" : "ข้อมูลในอุปกรณ์นี้"}</strong><span>{rooms.length} ห้อง · {invoices.length} บิล · {expenses.length} รายจ่าย</span></div></div>
-              <p>{isSupabaseRoomsConfigured ? "ข้อมูล shared รวมชื่อ/เบอร์ผู้เช่า บิล PromptPay และรายจ่าย; ผู้เข้าถึงแอปหรือ API ทุกคนอ่าน เพิ่ม แก้ไข ลบ หรือแทนที่/ล้างข้อมูลทั้งชุดได้ เก็บ backup ไว้ปลอดภัย; การนำเข้าจะขอความยินยอมก่อนเขียน" : "ไฟล์สำรองอาจมีข้อมูลผู้เช่าและ PromptPay ID เก็บไฟล์ไว้ในที่ปลอดภัย; การกู้คืนจะรวมรายการและตรวจความขัดแย้งก่อนบันทึก"}</p>
+              <div className="data-local-summary"><Database size={19} /><div><strong>{isSupabaseRoomsConfigured ? "ข้อมูลบัญชีบน Supabase" : "ข้อมูลในอุปกรณ์นี้"}</strong><span>{rooms.length} ห้อง · {invoices.length} บิล · {expenses.length} รายจ่าย</span></div></div>
+              <p>{isSupabaseRoomsConfigured ? "ข้อมูลบัญชีรวมชื่อ/เบอร์ผู้เช่า บิล PromptPay และรายจ่าย; Supabase Auth และ RLS จำกัดการเข้าถึงตามบัญชี เก็บ backup ไว้ปลอดภัย; การนำเข้าจะขอความยินยอมก่อนเขียน" : "ไฟล์สำรองอาจมีข้อมูลผู้เช่าและ PromptPay ID เก็บไฟล์ไว้ในที่ปลอดภัย; การกู้คืนจะรวมรายการและตรวจความขัดแย้งก่อนบันทึก"}</p>
               {isSupabaseRoomsConfigured && hasLocalBackupData && (
                 <>
                   <div className="data-local-summary"><Database size={19} /><div><strong>ข้อมูลเดิมในอุปกรณ์นี้</strong><span>{localBackupInfo.rooms} ห้อง · {localBackupInfo.invoices} บิล · {localBackupInfo.expenses} รายจ่าย{localBackupInfo.promptPayConfigured ? " · ตั้งค่า PromptPay แล้ว" : ""}</span></div></div>
                   <button className="button button-outline data-tool-button" onClick={exportLocalBackup}><Download size={17} />ส่งออกข้อมูลเดิมในอุปกรณ์ (.json)</button>
                   <label className={`backup-confirmation${localBackupExported ? " is-ready" : ""}`}>
                     <input type="checkbox" checked={localBackupConfirmed} disabled={!localBackupExported} onChange={event => setLocalBackupConfirmed(event.target.checked)} />
-                    <span>{localBackupExported ? "ฉันตรวจแล้วว่า backup ดาวน์โหลดครบและเก็บไว้อย่างปลอดภัย และยินยอมให้นำเข้าชุดข้อมูล public ที่ผู้เข้าถึง API อาจล้างได้" : "ส่งออก backup ของข้อมูลเดิมก่อน จึงจะยืนยันและนำเข้าข้อมูลได้"}</span>
+                    <span>{localBackupExported ? "ฉันตรวจแล้วว่า backup ดาวน์โหลดครบและเก็บไว้อย่างปลอดภัย และยินยอมให้นำเข้า account Cloud ของบัญชีที่เข้าสู่ระบบ" : "ส่งออก backup ของข้อมูลเดิมก่อน จึงจะยืนยันและนำเข้าข้อมูลได้"}</span>
                   </label>
                 </>
               )}

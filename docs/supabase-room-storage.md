@@ -1,12 +1,12 @@
 # RoomRent: Supabase Cloud storage สำหรับข้อมูลทั้งบัญชี
 
-เมื่อ build มี `VITE_SUPABASE_URL` และ publishable/anon key แอปจะให้เจ้าของเข้าสู่ระบบด้วย Supabase Auth ก่อนอ่านหรือแก้ไขข้อมูล Cloud ข้อมูลห้อง/ผู้เช่า บิลและสถานะชำระ รายจ่าย และการตั้งค่า PromptPay จะอยู่ใน account snapshot ของผู้ใช้คนเดียว ข้อมูลจากอุปกรณ์และตาราง `rental_rooms` รุ่นก่อนจะไม่ถูกส่งหรือรวมขึ้น Cloud เอง ต้องดาวน์โหลดไฟล์สำรองและยืนยันการย้าย/รวมก่อนทุกครั้ง
+เมื่อ build มี `VITE_SUPABASE_URL` และ publishable/anon key แอปจะบังคับให้ผู้ใช้เข้าสู่ระบบด้วย Supabase Auth ก่อนอ่านหรือแก้ไขข้อมูล Cloud ข้อมูลห้อง/ผู้เช่า บิลและสถานะชำระ รายจ่าย และการตั้งค่า PromptPay จะอยู่ใน account snapshot ของผู้ใช้คนนั้นและถูกคุ้มครองด้วย RLS แบบ owner-scoped; ผู้ใช้ที่ไม่ผ่าน Auth อ่านข้อมูลไม่ได้ ข้อมูลจากอุปกรณ์และตาราง `rental_rooms` รุ่นก่อนจะไม่ถูกส่งหรือรวมขึ้น Cloud เอง ต้องดาวน์โหลดไฟล์สำรองและยืนยันการย้าย/รวมก่อนทุกครั้ง
 
 ## 1. ตั้งค่า Supabase Database และ Auth
 
 1. เปิดโปรเจกต์ Supabase ที่จะใช้กับ RoomRent และตรวจว่า Project URL กับ publishable key เป็นของโปรเจกต์เดียวกัน
-2. ใน **SQL Editor** รัน [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) หากต้องอ่านข้อมูลห้องจากระบบ Supabase รุ่นเดิม จากนั้นรัน [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) เพื่อสร้าง snapshot table, RLS และ RPC สำหรับบันทึกแบบ revision-checked
-3. ตรวจว่า RLS เปิดอยู่บน `roomrent_account_data`; ไม่มี policy สำหรับ `anon` หรือ `public`; ผู้ใช้ `authenticated` อ่านได้เฉพาะแถวที่ `owner_id = auth.uid()` และเขียนข้อมูลผ่าน `save_roomrent_account_data` RPC เท่านั้น
+2. ใน **SQL Editor** รัน [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) หากต้องอ่านข้อมูลห้องจากระบบ Supabase รุ่นเดิม จากนั้นรัน [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) และ [`../supabase/p0_auth_rls.sql`](../supabase/p0_auth_rls.sql) เพื่อสร้าง/ยืนยัน snapshot table, RLS และ RPC สำหรับบันทึกแบบ revision-checked
+3. ตรวจว่า RLS เปิดอยู่บน `roomrent_account_data`; ไม่มี policy หรือ table privilege สำหรับ `anon`/`public`; ผู้ใช้ `authenticated` อ่านได้เฉพาะแถวที่ `owner_id = auth.uid()` และเขียนข้อมูลผ่าน `save_roomrent_account_data` RPC เท่านั้น ห้ามเปิด `save_roomrent_shared_data` ให้ browser role อีก
 4. ใน **Authentication → Providers** เปิด email/password sign-in และตัดสินใจว่าจะต้องยืนยันอีเมลหรือไม่
 5. ใน **Authentication → URL Configuration** ตั้ง Site URL เป็น production `https://roomrent-local-pwa.pages.dev` และเพิ่มเฉพาะ development/Preview URLs ที่ใช้งานจริงใน Redirect URLs; อย่าใช้ wildcard กว้างเกินจำเป็น
 
@@ -34,7 +34,7 @@ workflow นำค่าเหล่านี้มาใช้เฉพาะ�
 
 ## 3. การเข้าสู่ระบบและแหล่งข้อมูล
 
-หลัง deploy build ที่มีค่าตั้ง Supabase แอปจะแสดงหน้าเชื่อมต่อบัญชีและไม่แสดงข้อมูล local/Cloud จนกว่าจะยืนยัน session และโหลด account snapshot สำเร็จ การสมัครบัญชีและส่งอีเมลยืนยันยังใช้ email/password; หลังเตรียม mapping และ deploy Edge Function ตาม [คู่มือ Username Login](./supabase-username-login.md) ผู้ใช้เข้าสู่ระบบด้วย username/password เช่น `bnkhouse`
+หลัง deploy build ที่มีค่าตั้ง Supabase แอปจะแสดง Auth gate และไม่แสดงข้อมูล Cloud จนกว่าจะยืนยัน session และโหลด account snapshot สำเร็จ การสมัครบัญชีและส่งอีเมลยืนยันยังใช้ email/password; หลังเตรียม mapping และ deploy Edge Function ตาม [คู่มือ Username Login](./supabase-username-login.md) ผู้ใช้เข้าสู่ระบบด้วย username/password เช่น `bnkhouse`
 
 เมื่อเข้าสู่ระบบ:
 
@@ -67,6 +67,7 @@ workflow นำค่าเหล่านี้มาใช้เฉพาะ�
 
 - [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) — schema/RLS ของตารางห้องรุ่นเดิม
 - [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) — account snapshot table, RLS และ revision-checked save RPC
+- [`../supabase/p0_auth_rls.sql`](../supabase/p0_auth_rls.sql) — ปิด legacy shared public access และยืนยันสิทธิ์ owner-scoped ของ authenticated role
 - [`../supabase/login_names.sql`](../supabase/login_names.sql) — username mapping table ที่ไม่มีรหัสผ่านและปิด client access
 - [`../supabase/login_names_link_bnkhouse.sql`](../supabase/login_names_link_bnkhouse.sql) — ผูก username `bnkhouse` กับ Auth account ที่ยืนยันแล้ว (แทนอีเมลก่อนรัน)
 - [`../supabase/functions/login-with-username/index.ts`](../supabase/functions/login-with-username/index.ts) — Edge Function สำหรับ username sign-in ผ่าน Supabase Auth
