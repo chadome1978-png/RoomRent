@@ -114,7 +114,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
         </div>
         <footer className="invoice-actions">
           {invoice.status === "unpaid" && <button className="button button-outline" onClick={() => onEdit(invoice)}><Pencil size={16} />แก้ไขบิล</button>}
-          {invoice.status === "unpaid" && <button className="button button-outline invoice-delete-button" disabled={busy} onClick={() => onDelete(invoice)}><Trash2 size={16} />ลบบิล</button>}
+          {invoice.status === "unpaid" && !(invoice.paidAmount ?? 0) && <button className="button button-outline invoice-delete-button" disabled={busy} onClick={() => onDelete(invoice)}><Trash2 size={16} />ลบบิล</button>}
           <button className="button button-quiet" onClick={copyText}><Copy size={16} />{copied ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</button>
           <button className="button line-button" onClick={shareLine}><Share2 size={16} />ส่งทาง LINE</button>
           <button className="button button-outline print-button" onClick={() => window.print()}><Printer size={16} />พิมพ์ / บันทึก PDF</button>

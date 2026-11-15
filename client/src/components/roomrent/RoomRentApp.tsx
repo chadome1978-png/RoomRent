@@ -385,21 +385,21 @@ export function RoomRentApp() {
   }
   async function deleteInvoice(invoice: RentalInvoice) {
     const currentInvoice = dataRef.current.invoices.find(item => item.id === invoice.id);
-    if (!currentInvoice || currentInvoice.status !== "unpaid") {
-      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้ชำระเงินแล้ว");
+    if (!currentInvoice || currentInvoice.status !== "unpaid" || (currentInvoice.paidAmount ?? 0) > 0) {
+      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้มีการรับชำระเงินแล้ว");
       return;
     }
     if (!window.confirm(`ลบบิลห้อง ${currentInvoice.roomNumber} รอบ ${formatPeriod(currentInvoice.period)} ยอด ${formatMoney(currentInvoice.totalAmount)} หรือไม่`)) return;
     let deleted = false;
     const saved = await updateData(current => {
       const target = current.invoices.find(item => item.id === invoice.id);
-      if (!target || target.status !== "unpaid") return current;
+      if (!target || target.status !== "unpaid" || (target.paidAmount ?? 0) > 0) return current;
       deleted = true;
       return { ...current, invoices: current.invoices.filter(item => item.id !== invoice.id) };
     });
     if (!saved) return;
     if (!deleted) {
-      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้ชำระเงินแล้ว");
+      toast.error("ลบบิลไม่ได้ เนื่องจากบิลนี้มีการรับชำระเงินแล้ว");
       return;
     }
     setSelectedInvoice(null);
