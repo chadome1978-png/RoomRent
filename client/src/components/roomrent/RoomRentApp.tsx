@@ -651,6 +651,12 @@ function RoomCard({ room, hasBill, onEdit, onToggle, onCreateInvoice }: { room: 
   );
 }
 
+function latestMeterInvoice(invoices: RentalInvoice[], roomId: number, period: string, excludedId?: number) {
+  return invoices
+    .filter(invoice => invoice.id !== excludedId && invoice.roomId === roomId && invoice.period < period)
+    .sort((a, b) => b.period.localeCompare(a.period) || b.issuedAt.localeCompare(a.issuedAt))[0];
+}
+
 function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoice, onClose, onSave }: {
   rooms: RentalRoom[]; invoices: RentalInvoice[]; period: string; editingInvoice?: RentalInvoice; onClose: () => void;
   onSave: (values: InvoiceDraft) => void;
@@ -677,7 +683,7 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
       electricRate: moneyInput(electricRate),
     }
     : undefined;
-  const previous = room ? invoices.filter(invoice => invoice.id !== editingInvoice?.id && invoice.roomId === room.id && invoice.period < period).sort((a, b) => b.period.localeCompare(a.period))[0] : undefined;
+  const previous = room ? latestMeterInvoice(invoices, room.id, period, editingInvoice?.id) : undefined;
   const [waterPrevious, setWaterPrevious] = useState(editingInvoice ? String(editingInvoice.waterPrevious) : previous ? String(previous.waterCurrent) : "0");
   const [waterCurrent, setWaterCurrent] = useState(editingInvoice ? String(editingInvoice.waterCurrent) : "");
   const [electricPrevious, setElectricPrevious] = useState(editingInvoice ? String(editingInvoice.electricPrevious) : previous ? String(previous.electricCurrent) : "0");
@@ -699,7 +705,7 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
     setDueDate(dayDueDate(next));
     setWaterCurrent("");
     setElectricCurrent("");
-    const last = room ? invoices.filter(invoice => invoice.id !== editingInvoice?.id && invoice.roomId === room.id && invoice.period < next).sort((a, b) => b.period.localeCompare(a.period))[0] : undefined;
+    const last = room ? latestMeterInvoice(invoices, room.id, next, editingInvoice?.id) : undefined;
     setWaterPrevious(last ? String(last.waterCurrent) : "0");
     setElectricPrevious(last ? String(last.electricCurrent) : "0");
   }
@@ -711,7 +717,7 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
     setRentAmount(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.rentAmount : nextRoom?.rentAmount ?? 0));
     setWaterRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.waterRate : nextRoom?.waterRate ?? 0));
     setElectricRate(String(editingInvoice && editingInvoice.roomId === Number(next) ? editingInvoice.electricRate : nextRoom?.electricRate ?? 0));
-    const last = invoices.filter(invoice => invoice.id !== editingInvoice?.id && invoice.roomId === Number(next) && invoice.period < period).sort((a, b) => b.period.localeCompare(a.period))[0];
+    const last = latestMeterInvoice(invoices, Number(next), period, editingInvoice?.id);
     setWaterPrevious(last ? String(last.waterCurrent) : "0");
     setElectricPrevious(last ? String(last.electricCurrent) : "0");
   }
@@ -740,7 +746,7 @@ function InvoiceComposer({ rooms, invoices, period: initialPeriod, editingInvoic
           {room && <div className="selected-room-note"><div className="tenant-avatar">{initials(room.tenantName)}</div><span><strong>{room.tenantName}</strong><small>ค่าเช่าฐาน {formatMoney(room.rentAmount)}</small></span><b className="room-chip">{room.roomNumber}</b></div>}
           {editingInvoice && <><div className="form-grid three-col"><label className="field"><span>ค่าเช่าห้อง (บาท)</span><input type="number" min="0" step="0.01" value={rentAmount} onChange={event => setRentAmount(event.target.value)} required /></label><label className="field"><span>ค่าน้ำ / หน่วย</span><input type="number" min="0" step="0.01" value={waterRate} onChange={event => setWaterRate(event.target.value)} required /></label><label className="field"><span>ค่าไฟ / หน่วย</span><input type="number" min="0" step="0.01" value={electricRate} onChange={event => setElectricRate(event.target.value)} required /></label></div><p className="history-footnote">ค่าเช่าและอัตราที่ปรับมีผลกับบิลนี้เท่านั้น ไม่เปลี่ยนข้อมูลตั้งต้นของห้อง</p></>}
           {duplicate && <div className="inline-warning"><Bell size={15} />บิลของห้องนี้ในรอบ {formatPeriod(period)} มีอยู่แล้ว กรุณาเลือกเดือนอื่น</div>}
-          <div className="meter-block"><div className="section-label"><div><strong>บันทึกมิเตอร์</strong><span>กรอกเลขครั้งก่อนและเลขปัจจุบัน</span></div><span className="meter-unit-label">หน่วย</span></div><MeterRow icon={<Droplets size={16} />} label="น้ำประปา" previous={waterPrevious} setPrevious={setWaterPrevious} current={waterCurrent} setCurrent={setWaterCurrent} rate={Number(room?.waterRate ?? 0)} total={waterTotal} units={waterUnits} /><MeterRow icon={<Zap size={16} />} label="ไฟฟ้า" previous={electricPrevious} setPrevious={setElectricPrevious} current={electricCurrent} setCurrent={setElectricCurrent} rate={Number(room?.electricRate ?? 0)} total={electricTotal} units={electricUnits} /></div>
+          <div className="meter-block"><div className="section-label"><div><strong>บันทึกมิเตอร์</strong><span>{editingInvoice ? "ค่ามิเตอร์ที่บันทึกไว้ในบิลนี้" : previous ? `ครั้งก่อนจากบิลรอบ ${formatPeriod(previous.period)}` : "ยังไม่มีบิลก่อนหน้า · เริ่มจาก 0"}</span></div><span className="meter-unit-label">หน่วย</span></div><MeterRow icon={<Droplets size={16} />} label="น้ำประปา" previous={waterPrevious} setPrevious={setWaterPrevious} current={waterCurrent} setCurrent={setWaterCurrent} rate={Number(room?.waterRate ?? 0)} total={waterTotal} units={waterUnits} /><MeterRow icon={<Zap size={16} />} label="ไฟฟ้า" previous={electricPrevious} setPrevious={setElectricPrevious} current={electricCurrent} setCurrent={setElectricCurrent} rate={Number(room?.electricRate ?? 0)} total={electricTotal} units={electricUnits} /></div>
           <div className="extra-block"><div className="section-label"><div><strong>ค่าใช้จ่ายเพิ่มเติม</strong><span>ค่าขยะ ค่าจอดรถ หรือส่วนลด</span></div><button type="button" className="add-link" onClick={() => setExtras(current => [...current, { label: "", amount: "" }])}><Plus size={14} />เพิ่มรายการ</button></div>{!extras.length ? <p className="no-extra">ไม่มีรายการเพิ่มเติมในบิลนี้</p> : extras.map((item, index) => <div className="extra-line" key={index}><input aria-label="ชื่อรายการเพิ่มเติม" maxLength={80} placeholder="ชื่อรายการ" value={item.label} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, label: event.target.value } : line))} /><div className="input-suffix"><input aria-label="จำนวนเงิน" type="number" step="0.01" placeholder="0" value={item.amount} onChange={event => setExtras(current => current.map((line, i) => i === index ? { ...line, amount: event.target.value } : line))} /><b>บาท</b></div><button type="button" className="remove-extra" aria-label="ลบรายการ" onClick={() => setExtras(current => current.filter((_, i) => i !== index))}>×</button></div>)}</div>
           <div className="form-grid two-col composer-lower"><label className="field"><span>วันครบกำหนด <i>*</i></span><input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} required /></label><label className="field"><span>หมายเหตุ</span><input maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" /></label></div>
           <div className="bill-calculation"><div><span>ค่าเช่า</span><strong>{formatMoney(room?.rentAmount ?? 0)}</strong></div><div><span>ค่าน้ำ · {waterUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(waterTotal)}</strong></div><div><span>ค่าไฟ · {electricUnits.toLocaleString("th-TH")} หน่วย</span><strong>{formatMoney(electricTotal)}</strong></div>{extras.length > 0 && <div><span>รายการเพิ่มเติม</span><strong>{formatMoney(extraTotal)}</strong></div>}<div className="calculation-total"><span>ยอดรวมบิล</span><strong>{formatMoney(invoiceTotal)}</strong></div></div>
