@@ -1,78 +1,51 @@
-# RoomRent: Supabase Cloud storage สำหรับข้อมูลทั้งบัญชี
+# RoomRent: Supabase Cloud storage แบบ Public shared
 
-เมื่อ build มี `VITE_SUPABASE_URL` และ publishable/anon key แอปจะบังคับให้ผู้ใช้เข้าสู่ระบบด้วย Supabase Auth ก่อนอ่านหรือแก้ไขข้อมูล Cloud ข้อมูลห้อง/ผู้เช่า บิลและสถานะชำระ รายจ่าย และการตั้งค่า PromptPay จะอยู่ใน account snapshot ของผู้ใช้คนนั้นและถูกคุ้มครองด้วย RLS แบบ owner-scoped; ผู้ใช้ที่ไม่ผ่าน Auth อ่านข้อมูลไม่ได้ ข้อมูลจากอุปกรณ์และตาราง `rental_rooms` รุ่นก่อนจะไม่ถูกส่งหรือรวมขึ้น Cloud เอง ต้องดาวน์โหลดไฟล์สำรองและยืนยันการย้าย/รวมก่อนทุกครั้ง
+เมื่อ build มี `VITE_SUPABASE_URL` และ publishable/anon key แอปจะเปิดใช้งานโดยไม่บังคับ Login และอ่าน/เขียนข้อมูลชุดเดียวกันผ่าน `roomrent_shared_data` ข้อมูลห้อง ผู้เช่า บิล รายจ่าย อัตราค่าน้ำค่าไฟ และ PromptPay จึงเป็นข้อมูลสาธารณะสำหรับผู้ที่เข้าถึงแอปหรือ Supabase API ได้
 
-## 1. ตั้งค่า Supabase Database และ Auth
+> คำเตือน: Public mode ไม่เหมาะกับข้อมูลผู้เช่าจริงหรือข้อมูลส่วนบุคคล ทุกคนที่มี URL/API สามารถอ่าน แก้ไข แทนที่ หรือล้าง shared dataset ได้ ระบบใช้ revision-checked RPC เพื่อป้องกันการเขียนชนกันเท่านั้น ไม่ใช่ระบบแยกสิทธิ์ผู้ใช้
 
-1. เปิดโปรเจกต์ Supabase ที่จะใช้กับ RoomRent และตรวจว่า Project URL กับ publishable key เป็นของโปรเจกต์เดียวกัน
-2. ใน **SQL Editor** รัน [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) หากต้องอ่านข้อมูลห้องจากระบบ Supabase รุ่นเดิม จากนั้นรัน [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) และ [`../supabase/p0_auth_rls.sql`](../supabase/p0_auth_rls.sql) เพื่อสร้าง/ยืนยัน snapshot table, RLS และ RPC สำหรับบันทึกแบบ revision-checked
-3. ตรวจว่า RLS เปิดอยู่บน `roomrent_account_data`; ไม่มี policy หรือ table privilege สำหรับ `anon`/`public`; ผู้ใช้ `authenticated` อ่านได้เฉพาะแถวที่ `owner_id = auth.uid()` และเขียนข้อมูลผ่าน `save_roomrent_account_data` RPC เท่านั้น ห้ามเปิด `save_roomrent_shared_data` ให้ browser role อีก
-4. ใน **Authentication → Providers** เปิด email/password sign-in และตัดสินใจว่าจะต้องยืนยันอีเมลหรือไม่
-5. ใน **Authentication → URL Configuration** ตั้ง Site URL เป็น production `https://roomrent-local-pwa.pages.dev` และเพิ่มเฉพาะ development/Preview URLs ที่ใช้งานจริงใน Redirect URLs; อย่าใช้ wildcard กว้างเกินจำเป็น
+## 1. ตั้งค่า Supabase Database
 
-`roomrent_account_data` เป็น JSONB snapshot หนึ่งแถวต่อเจ้าของ; ตาราง `rental_rooms` เป็นตาราง legacy ที่อ่านได้ระหว่าง migration เท่านั้น ระบบใหม่ไม่ลบหรือแก้ไขแถว legacy อัตโนมัติ ข้อมูลทั้งหมดใน snapshot ถูกคุ้มครองด้วย RLS; direct `INSERT`/`UPDATE`/`DELETE` ถูกเพิกถอนจาก `authenticated`; RPC จะตรวจ `auth.uid()`, รูปแบบ document, ขนาดสูงสุด 1 MiB และ expected revision เพื่อป้องกันการเขียนชนกัน
+1. เปิดโปรเจกต์ Supabase ที่จะใช้กับ RoomRent และตรวจว่า Project URL กับ publishable/anon key เป็นของโปรเจกต์เดียวกัน
+2. รัน [`../supabase/roomrent_shared_data.sql`](../supabase/roomrent_shared_data.sql) เพื่อสร้าง/ยืนยัน shared table และ validation RPC
+3. รัน [`../supabase/public_mode.sql`](../supabase/public_mode.sql) เป็นขั้นตอนสุดท้ายเพื่อเปิดสิทธิ์อ่านให้ `anon`/`authenticated` และสิทธิ์เรียก `save_roomrent_shared_data`
+4. ไม่ต้องเปิดหรือใช้ Supabase Auth สำหรับการเข้า RoomRent
+5. ตาราง `roomrent_account_data` ยังคงปิดสิทธิ์ browser role และไม่ถูกนำมาแสดงใน Public mode
 
-## 2. กำหนด build-time values
-
-ใช้เฉพาะ Project URL และ **publishable key** (`sb_publishable_...`) หรือ legacy anon key จาก **Project Settings → API**:
+## 2. Build-time values
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
 ```
 
-ห้ามใช้ `service_role` หรือ `sb_secret_...` ใน browser, `VITE_*`, GitHub Variables หรือไฟล์ build เพราะค่าที่ขึ้นต้นด้วย `VITE_` จะถูกใส่ใน JavaScript ที่ผู้ใช้ดาวน์โหลดได้ ความปลอดภัยมาจาก Auth/RLS ไม่ใช่การซ่อน publishable key
+ห้ามใช้ `service_role` หรือ `sb_secret_...` ใน browser, `VITE_*`, GitHub Variables หรือไฟล์ build ควรใช้ publishable/anon key เท่านั้น
 
-สำหรับ build ในเครื่อง ให้คัดลอก `.env.example` เป็น `.env` ที่ root ของโปรเจกต์ ใส่ค่าจริง แล้วรัน `pnpm build:static`; `.env` ถูก ignore และห้าม commit
+## 3. การทำงานของ Public mode
 
-สำหรับ GitHub Actions ให้ตั้ง repository **Settings → Secrets and variables → Actions → Variables**:
+- แอปโหลดข้อมูลจากแถว `id = 'shared'` ใน `roomrent_shared_data` โดยไม่ต้องมี session
+- การบันทึกใช้ `save_roomrent_shared_data(p_expected_revision, p_document)` ซึ่งตรวจ schema, ขนาดสูงสุด 1 MiB และ expected revision
+- ทุกคนเห็นข้อมูล shared ชุดเดียวกัน และการแก้ไขจากผู้ใช้คนหนึ่งอาจทำให้ผู้ใช้อื่นเห็นข้อมูลใหม่
+- ข้อมูลจาก localStorage ไม่ถูกอัปโหลดอัตโนมัติ ผู้ใช้ต้องสั่งนำเข้า/กู้คืนเอง
+- ปุ่มลบบิลแสดงเฉพาะบิลที่ยังไม่ชำระ แต่ Public mode ไม่สามารถป้องกันผู้ใช้ที่มี API access จากการแทนที่ JSON ทั้งชุดได้
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+## 4. สำรองและกู้คืน
 
-workflow นำค่าเหล่านี้มาใช้เฉพาะในขั้น build ก่อน Direct Upload ไป Cloudflare Pages ตัวแปรใน Cloudflare Pages Dashboard อย่างเดียวจะไม่เปลี่ยน bundle ที่สร้างมาแล้ว เพราะ Direct Upload รับ static files สำเร็จรูป ไม่ได้รัน Vite build ซ้ำหลังอัปโหลด
+ก่อนเปิด Public mode หรือย้ายข้อมูล ให้ดาวน์โหลด backup JSON และตรวจสอบว่าไม่มีข้อมูลส่วนบุคคลที่ไม่ต้องการเผยแพร่ การนำเข้า/กู้คืนจะรวมข้อมูลผ่าน shared RPC และผู้เข้าถึงแอปทุกคนอาจเห็นข้อมูลนั้น
 
-## 3. การเข้าสู่ระบบและแหล่งข้อมูล
-
-หลัง deploy build ที่มีค่าตั้ง Supabase แอปจะแสดง Auth gate และไม่แสดงข้อมูล Cloud จนกว่าจะยืนยัน session และโหลด account snapshot สำเร็จ การสมัครบัญชีและส่งอีเมลยืนยันยังใช้ email/password; หลังเตรียม mapping และ deploy Edge Function ตาม [คู่มือ Username Login](./supabase-username-login.md) ผู้ใช้เข้าสู่ระบบด้วย username/password เช่น `bnkhouse`
-
-เมื่อเข้าสู่ระบบ:
-
-- ถ้ามี snapshot อยู่แล้วและไม่มีข้อมูลเก่าที่ต้องยืนยัน แอปโหลดข้อมูลของบัญชีนั้นและบันทึกการเปลี่ยนแปลงทั้งหมดกลับ Cloud
-- ถ้ายังไม่มี snapshot, พบข้อมูลใน `localStorage`, หรือพบห้องใน `rental_rooms` รุ่นเดิม แอปจะแสดงหน้ากั้นการย้ายข้อมูล; ไม่มีการอัปโหลดอัตโนมัติ
-- การบันทึกทำผ่าน `save_roomrent_account_data` RPC โดยส่ง expected revision; เมื่อเกิด network error หรือข้อมูลถูกแก้จากอุปกรณ์อื่น การบันทึกถูกปฏิเสธและ UI คืนข้อมูลเดิมแทนการแสดงว่าสำเร็จ
-- ข้อมูล Cloud ไม่ถูกเก็บใน service-worker cache; app shell ใช้ออฟไลน์ได้ แต่ข้อมูล Cloud ต้องใช้อินเทอร์เน็ต
-
-## 4. สำรองและย้าย/รวมข้อมูลเดิม
-
-ก่อนกดย้าย ผู้ใช้ต้องกด **ดาวน์โหลดไฟล์สำรอง (JSON)** และติ๊กยืนยันว่าเก็บไฟล์ไว้แล้ว จากนั้นตรวจจำนวนห้อง บิล รายจ่าย และสถานะ PromptPay กับอีเมลบัญชี Supabase ปลายทาง แล้วจึงยืนยันการย้ายอีกครั้ง
-
-ไฟล์ก่อน migration รวมข้อมูล local, snapshot ปัจจุบันที่อ่านได้ และห้องจากตาราง `rental_rooms` รุ่นเก่าเมื่ออ่านได้ แอปจะรวมรายการที่ไม่ซ้ำโดยเก็บข้อมูลเดิมไว้; หากพบเลขห้องหรือรอบบิลชนกันแต่รายละเอียดต่างกัน, PromptPay settings ขัดแย้ง, หรือ revision เปลี่ยนระหว่าง migration ระบบหยุดโดยไม่เขียนทับ ข้อมูลในอุปกรณ์และไฟล์ backup จะไม่ถูกลบเมื่อ migration ล้มเหลว
-
-หลัง RPC บันทึกสำเร็จเท่านั้น แอปจึงเปิดหน้าหลัก Cloud และลบสำเนา local data ที่ย้ายแล้วจาก `localStorage`; snapshot จะบันทึก marker เพื่อไม่อ่าน/นำเข้าห้อง legacy ซ้ำ ทั้งนี้แอปไม่ลบตาราง `rental_rooms` เก่า ผู้ใช้สามารถดาวน์โหลด backup จาก Cloud ได้ภายหลังจากเมนู **สำรอง / กู้คืนข้อมูล**
-
-การกู้คืนไฟล์ JSON ตรวจ schema ก่อนเขียน และแสดงการยืนยันก่อนรวมรายการตาม ID; หากเป็นบัญชี Cloud ให้ส่งออก backup ล่าสุดก่อน restore ระบบจะไม่กู้คืนหรือ merge โดยอัตโนมัติ
+หากต้องการความเป็นส่วนตัว ให้เปลี่ยนกลับเป็น Auth/RLS mode ด้วย `p0_auth_rls.sql` และ deploy frontend ที่ใช้ account adapter แทน shared adapter
 
 ## 5. ทดสอบ
 
 1. รัน `pnpm check`, `pnpm test`, `pnpm build:static` และ `node --check client/public/sw.js`
-2. ใน Preview/production สมัครหรือเข้าสู่ระบบด้วยบัญชีทดสอบ แล้วตรวจว่าบัญชีที่ไม่มีข้อมูลแสดงตัวเลือกเริ่ม Cloud เปล่า หรือย้ายข้อมูลหลังดาวน์โหลด backup
-3. สร้างห้อง บิล รายจ่าย และ PromptPay settings ด้วยข้อมูลสมมติ; รีโหลดหน้าและลงชื่อเข้าใช้อีกครั้งเพื่อยืนยันว่าทุกหมวดอยู่ใน Cloud
-4. ตรวจว่า logout/บัญชีอื่นไม่เห็นข้อมูลเดิม และ SQL/RLS ไม่ให้ `anon` อ่านข้อมูล; ห้ามนำข้อมูลผู้เช่าจริงมาใช้เป็น fixture หรือใส่ใน test/log/screenshot
-5. ปิดเครือข่ายระหว่างบันทึกและยืนยันว่าแอปแสดง error และไม่อ้างว่าบันทึกสำเร็จ
-
-อย่าทดสอบ migration กับบัญชี production ที่มีข้อมูลจริงก่อนส่งออก backup และยืนยันว่า SQL/RLS พร้อมใช้งาน
+2. เปิด Production โดยไม่ Login และตรวจว่าข้อมูล shared โหลดได้
+3. สร้างข้อมูลทดสอบ แก้ไขจากอีก browser และตรวจว่า revision conflict ถูกจัดการ
+4. ตรวจ anonymous REST ว่าอ่าน `roomrent_shared_data` ได้ตามที่ตั้งใจ และ `roomrent_account_data` ยังอ่านไม่ได้
+5. ห้ามใช้ข้อมูลผู้เช่าจริงใน fixture, test, log หรือ screenshot ของ Public mode
 
 ## อ้างอิงไฟล์
 
-- [`../supabase/rental_rooms.sql`](../supabase/rental_rooms.sql) — schema/RLS ของตารางห้องรุ่นเดิม
-- [`../supabase/roomrent_account_data.sql`](../supabase/roomrent_account_data.sql) — account snapshot table, RLS และ revision-checked save RPC
-- [`../supabase/p0_auth_rls.sql`](../supabase/p0_auth_rls.sql) — ปิด legacy shared public access และยืนยันสิทธิ์ owner-scoped ของ authenticated role
-- [`../supabase/login_names.sql`](../supabase/login_names.sql) — username mapping table ที่ไม่มีรหัสผ่านและปิด client access
-- [`../supabase/login_names_link_bnkhouse.sql`](../supabase/login_names_link_bnkhouse.sql) — ผูก username `bnkhouse` กับ Auth account ที่ยืนยันแล้ว (แทนอีเมลก่อนรัน)
-- [`../supabase/functions/login-with-username/index.ts`](../supabase/functions/login-with-username/index.ts) — Edge Function สำหรับ username sign-in ผ่าน Supabase Auth
-- [`./supabase-username-login.md`](./supabase-username-login.md) — ขั้นตอนตั้งค่า/deploy และทดสอบ Username Login
-- `client/src/components/roomrent/supabaseRooms.ts` — Supabase client, Auth และ legacy rooms read
-- `client/src/components/roomrent/supabaseAccountData.ts` — อ่าน/บันทึก account snapshot
-- `client/src/components/roomrent/accountMigration.ts` — ตรวจซ้ำ, map room references และ merge migration
-- `client/src/components/roomrent/SupabaseAccountPanel.tsx` — Auth, backup confirmation และ migration UI
+- [`../supabase/roomrent_shared_data.sql`](../supabase/roomrent_shared_data.sql) — shared table, validation และ revision-checked save RPC
+- [`../supabase/public_mode.sql`](../supabase/public_mode.sql) — เปิด Public read/RPC grants
+- [`../supabase/p0_auth_rls.sql`](../supabase/p0_auth_rls.sql) — migration สำหรับย้อนกลับไปใช้ Auth/RLS mode
+- `client/src/components/roomrent/supabaseSharedData.ts` — shared repository ที่ไม่ต้องใช้ Auth
