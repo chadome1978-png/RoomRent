@@ -95,6 +95,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasValidInvoicePayment(value: Record<string, unknown>): boolean {
+  const hasPaidAmount = value.paidAmount !== undefined;
+  const hasBalanceAmount = value.balanceAmount !== undefined;
+  if (hasPaidAmount !== hasBalanceAmount) return false;
+
+  // Version-1 invoices did not store payment amounts. Keep those records readable,
+  // but require both fields and a consistent relationship for newly recorded payments.
+  if (!hasPaidAmount) return value.status !== "partial";
+  if (typeof value.totalAmount !== "number" || !Number.isFinite(value.totalAmount) || value.totalAmount < 0) return false;
+  if (typeof value.paidAmount !== "number" || !Number.isFinite(value.paidAmount) || value.paidAmount < 0) return false;
+  if (typeof value.balanceAmount !== "number" || !Number.isFinite(value.balanceAmount) || value.balanceAmount < 0) return false;
+  if (value.paidAmount > value.totalAmount || value.balanceAmount > value.totalAmount) return false;
+  if (Math.abs(value.paidAmount + value.balanceAmount - value.totalAmount) > 0.005) return false;
+
+  if (value.status === "paid") return value.balanceAmount <= 0.005;
+  if (value.status === "partial") return value.paidAmount > 0 && value.balanceAmount > 0;
+  return value.paidAmount <= 0.005 && Math.abs(value.balanceAmount - value.totalAmount) <= 0.005;
+}
+
 function isRoom(value: unknown): value is RentalRoom {
   if (!isRecord(value)) return false;
   return typeof value.id === "number"
@@ -136,6 +155,7 @@ function isInvoice(value: unknown): value is RentalInvoice {
     && typeof value.totalAmount === "number"
     && typeof value.note === "string"
     && (value.status === "paid" || value.status === "unpaid" || value.status === "partial")
+    && hasValidInvoicePayment(value)
     && typeof value.issuedAt === "string";
 }
 

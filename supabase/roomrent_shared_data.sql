@@ -38,6 +38,11 @@ declare
   v_date date;
   v_promptpay_id text;
   v_recipient_name text;
+  v_total numeric;
+  v_paid numeric;
+  v_balance numeric;
+  v_has_paid boolean;
+  v_has_balance boolean;
 begin
   if p_document is null
     or pg_catalog.jsonb_typeof(p_document) is distinct from 'object'
@@ -115,9 +120,37 @@ begin
       or pg_catalog.jsonb_typeof(v_item -> 'totalAmount') is distinct from 'number'
       or pg_catalog.jsonb_typeof(v_item -> 'note') is distinct from 'string'
       or pg_catalog.jsonb_typeof(v_item -> 'status') is distinct from 'string'
-      or v_item ->> 'status' not in ('paid', 'unpaid')
+      or v_item ->> 'status' not in ('paid', 'unpaid', 'partial')
       or pg_catalog.jsonb_typeof(v_item -> 'issuedAt') is distinct from 'string' then
       return false;
+    end if;
+
+    v_total := (v_item ->> 'totalAmount')::numeric;
+    if v_total < 0 then return false; end if;
+    v_has_paid := v_item ? 'paidAmount';
+    v_has_balance := v_item ? 'balanceAmount';
+    if v_has_paid is distinct from v_has_balance then return false; end if;
+    -- Version-1 invoices omitted both payment fields. Keep those legacy records valid,
+    -- but require a complete and internally consistent pair for recorded payments.
+    if not v_has_paid then
+      if v_item ->> 'status' = 'partial' then return false; end if;
+    else
+      if pg_catalog.jsonb_typeof(v_item -> 'paidAmount') is distinct from 'number'
+        or pg_catalog.jsonb_typeof(v_item -> 'balanceAmount') is distinct from 'number' then
+        return false;
+      end if;
+      v_paid := (v_item ->> 'paidAmount')::numeric;
+      v_balance := (v_item ->> 'balanceAmount')::numeric;
+      if v_paid < 0 or v_balance < 0 or v_paid > v_total or v_balance > v_total
+        or pg_catalog.abs(v_paid + v_balance - v_total) > 0.005 then
+        return false;
+      end if;
+      if v_item ->> 'status' = 'paid' and v_balance > 0.005 then return false; end if;
+      if v_item ->> 'status' = 'partial' and (v_paid <= 0 or v_balance <= 0) then return false; end if;
+      if v_item ->> 'status' = 'unpaid'
+        and (v_paid > 0.005 or pg_catalog.abs(v_balance - v_total) > 0.005) then
+        return false;
+      end if;
     end if;
 
     for v_extra in select value from pg_catalog.jsonb_array_elements(v_item -> 'extras') as extras(value) loop

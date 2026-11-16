@@ -79,7 +79,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
             <div className="invoice-paper-heading">
               <div className="invoice-brand-symbol">R</div>
               <div><strong>ROOMRENT</strong><span>ใบแจ้งค่าเช่าห้องพักรายเดือน</span></div>
-            <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : invoice.status === "partial" ? "is-partial" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : invoice.status === "partial" ? "ชำระไม่ครบ" : "รอชำระ"}</div>
+            <div className={`payment-stamp ${invoice.status === "paid" ? "is-paid" : invoice.status === "partial" ? "is-partial" : "is-unpaid"}`}>{invoice.status === "paid" ? "ชำระแล้ว" : invoice.status === "partial" ? "ค้างชำระ" : "รอชำระ"}</div>
             </div>
             <div className="invoice-paper-meta">
               <div><span>ผู้เช่า</span><strong>{invoice.tenantName}</strong><small>ห้อง {invoice.roomNumber}{invoice.phone ? ` · ${invoice.phone}` : ""}</small></div>
@@ -126,7 +126,7 @@ export function InvoicePreview({ invoice, onClose, onSetPaid, onDelete, onEdit, 
           <header className="dialog-header"><div><span className="eyebrow">บันทึกการรับเงิน</span><h2 id="payment-record-title">ยอดชำระบิล</h2></div><button className="icon-button" onClick={() => setPaymentDialogOpen(false)} aria-label="ปิด"><X size={19} /></button></header>
           <div className="payment-record-body">
             <div className="payment-summary-row"><span>ยอดเต็มตามบิล</span><strong>{formatMoney(invoice.totalAmount)}</strong></div>
-            <label className="field"><span>ยอดที่รับชำระจริง <i>*</i></span><div className="input-suffix"><input type="number" min="0" max={invoice.totalAmount} step="0.01" value={paymentInput} onChange={event => setPaymentInput(event.target.value)} autoFocus /><b>บาท</b></div></label>
+            <label className="field"><span>{recordedPaidAmount > 0 ? "ยอดชำระสะสมทั้งหมด" : "ยอดที่รับชำระจริง"} <i>*</i></span><div className="input-suffix"><input type="number" min="0" max={invoice.totalAmount} step="0.01" value={paymentInput} onChange={event => setPaymentInput(event.target.value)} autoFocus /><b>บาท</b></div></label>
             <button type="button" className="text-button" onClick={() => setPaymentInput(String(invoice.totalAmount))}>รับเต็มจำนวน {formatMoney(invoice.totalAmount)}</button>
             <div className={`payment-balance-preview ${paymentBalance > 0 ? "has-balance" : "is-settled"}`}><span>ยอดคงค้างหลังรับเงิน</span><strong>{formatMoney(paymentBalance)}</strong></div>
             {paymentBalance > 0 && <p className="history-footnote">ยอดคงค้างจะถูกนำไปบวกในบิลเดือนถัดไปโดยอัตโนมัติ</p>}
