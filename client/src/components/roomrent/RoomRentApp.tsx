@@ -579,7 +579,7 @@ export function RoomRentApp() {
           {isSupabaseRoomsConfigured && hasLocalBackupData && <section className="local-data-notice"><div><strong>พบข้อมูลเดิมในอุปกรณ์นี้</strong><span>ข้อมูลยังอยู่ในเครื่องและไม่ได้อัปโหลดอัตโนมัติ; ส่งออกสำรองและเลือกนำเข้าเองได้จากเมนูสำรอง/กู้คืน</span></div><button onClick={() => setDataToolsOpen(true)}>จัดการข้อมูลเดิม</button></section>}
           {isSupabaseRoomsConfigured && supabaseLoading && <div className="inline-warning" role="status">กำลังโหลด shared dataset จาก Supabase…</div>}
           {isSupabaseRoomsConfigured && supabaseError && <div className="inline-warning public-load-error" role="alert"><span>{supabaseError}</span><button className="button button-quiet" onClick={() => void reloadSharedData()} disabled={supabaseLoading}>โหลดข้อมูลใหม่</button></div>}
-          <div className="local-storage-strip"><Database size={15} /><span>{isSupabaseRoomsConfigured ? "ห้อง บิล รายจ่าย และ PromptPay อยู่ใน shared Cloud · ขณะออฟไลน์เปิดได้เฉพาะ app shell" : "ข้อมูลเก็บในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อป้องกันข้อมูลสูญหาย"}</span><button onClick={() => setDataToolsOpen(true)}>สำรองข้อมูล</button></div>
+          {!isSupabaseRoomsConfigured && <div className="local-storage-strip"><Database size={15} /><span>ข้อมูลเก็บในอุปกรณ์นี้ · ส่งออกไฟล์สำรองเพื่อป้องกันข้อมูลสูญหาย</span><button onClick={() => setDataToolsOpen(true)}>สำรองข้อมูล</button></div>}
           {storageError && <div className="inline-warning storage-warning"><Bell size={15} />{storageError}</div>}
           {view === "overview" ? (
             <>
